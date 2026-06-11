@@ -18,6 +18,8 @@ model User {
   accounts      Account[]
   sessions      Session[]
   predictions   Prediction[]
+  createdPools  Pool[]       @relation("PoolCreator")
+  poolMemberships PoolMember[]
   createdAt     DateTime     @default(now())
 
   @@index([createdAt])
@@ -108,4 +110,31 @@ model AuditLog {
   @@index([action])
   @@index([entity, entityId])
   @@index([createdAt])
+}
+
+model Pool {
+  id          String       @id @default(cuid())
+  name        String
+  inviteCode  String       @unique
+  createdById String?
+  createdBy   User?        @relation("PoolCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  members     PoolMember[]
+  createdAt   DateTime     @default(now())
+
+  @@index([createdById])
+  @@index([createdAt])
+}
+
+model PoolMember {
+  id       String   @id @default(cuid())
+  poolId   String
+  userId   String
+  role     String   @default("member")
+  joinedAt DateTime @default(now())
+  pool     Pool     @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([poolId, userId])
+  @@index([userId])
+  @@index([poolId])
 }

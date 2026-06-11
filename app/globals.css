@@ -19,6 +19,7 @@ h1, h2, h3, p { margin-top: 0; }
 button, .buttonLink { cursor: pointer; border: 0; border-radius: 9px; padding: 10px 14px; background: #116530; color: white; font: inherit; font-weight: 700; text-decoration: none; }
 button:disabled { cursor: not-allowed; opacity: .45; }
 .buttonSecondary { background: #e7eee9; color: #142019; }
+.buttonDanger { background: #fee2e2; color: #9a3412; }
 input { width: 64px; padding: 9px; border: 1px solid #b9c8be; border-radius: 8px; text-align: center; font: inherit; }
 select { padding: 9px 12px; border: 1px solid #b9c8be; border-radius: 8px; background: white; color: #142019; font: inherit; }
 .badge, .status { display: inline-block; background: #e7eee9; padding: 5px 9px; border-radius: 999px; font-size: .75rem; font-weight: 700; }
@@ -102,6 +103,33 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .newsCard p { color: #617068; line-height: 1.45; }
 .newsCard .buttonLink { width: fit-content; align-self: end; }
 .newsMeta { display: flex; justify-content: space-between; gap: 12px; align-items: center; color: #8a938e; font-size: .82rem; font-weight: 800; }
+.poolActionsGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 18px; }
+.poolActionCard, .poolListCard { border: 1px solid #dce5df; border-radius: 22px; background: white; box-shadow: 0 12px 34px rgb(20 32 25 / 8%); }
+.poolActionCard { display: grid; gap: 14px; padding: 22px; }
+.poolActionCard h2 { margin-bottom: 0; font-size: clamp(1.35rem, 3vw, 2rem); }
+.poolForm { display: grid; gap: 12px; }
+.poolForm label { display: grid; gap: 7px; color: #617068; font-size: .82rem; font-weight: 900; text-transform: uppercase; }
+.poolForm input { width: 100%; text-align: left; }
+.poolListCard { overflow: hidden; }
+.poolList { display: grid; }
+.poolListItem { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, .8fr); gap: 16px; align-items: center; padding: 18px 24px; border-bottom: 1px solid #e7eee9; }
+.poolListItem:last-child { border-bottom: 0; }
+.poolListItem h3 { margin: 8px 0 6px; font-size: 1.35rem; }
+.poolInviteBox { display: grid; gap: 7px; padding: 12px; border: 1px solid #e7eee9; border-radius: 14px; background: #f8fbf9; }
+.poolInviteBox span { color: #617068; font-size: .76rem; font-weight: 900; text-transform: uppercase; }
+.poolInviteBox strong { color: #116530; font-size: 1.25rem; letter-spacing: .08em; }
+.poolInviteBox input { width: 100%; text-align: left; font-size: .82rem; color: #617068; background: white; }
+.poolContextBanner { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-bottom: 18px; padding: 18px; border: 1px solid #dce5df; border-radius: 18px; background: linear-gradient(135deg, #ffffff 0%, #fff8df 100%); box-shadow: 0 10px 26px rgb(20 32 25 / 7%); }
+.poolContextBanner h2 { margin: 8px 0 6px; font-size: clamp(1.35rem, 3vw, 2rem); }
+.poolContextBanner p { margin-bottom: 0; }
+.poolContextActions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.poolDetailsGrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, .75fr); gap: 16px; margin-bottom: 18px; }
+.poolMemberList { display: grid; }
+.poolMemberItem { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 14px 24px; border-bottom: 1px solid #e7eee9; }
+.poolMemberItem:last-child { border-bottom: 0; }
+.poolMemberItem div { display: grid; gap: 4px; }
+.poolMemberItem strong { color: #142019; }
+.poolMemberItem span { color: #617068; font-size: .82rem; font-weight: 800; }
 .adminResultsList { display: grid; gap: 14px; }
 .adminResultCard { display: grid; gap: 16px; padding: 18px; border: 1px solid #dce5df; border-radius: 18px; background: white; box-shadow: 0 12px 28px rgb(20 32 25 / 7%); }
 .adminResultHeader { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
@@ -167,6 +195,17 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .pageToolbar h2 { margin: 8px 0 0; font-size: clamp(1.35rem, 3vw, 2rem); }
 .toolbarTips { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; color: #617068; font-size: .9rem; }
 .toolbarTips span { padding: 7px 10px; border-radius: 999px; background: #f4f7f5; }
+.deadlineAlerts { display: grid; gap: 14px; margin-bottom: 18px; padding: 18px; border: 1px solid #dce5df; border-radius: 18px; background: white; box-shadow: 0 10px 26px rgb(20 32 25 / 7%); }
+.deadlineAlerts h2 { margin: 8px 0 0; font-size: clamp(1.2rem, 3vw, 1.7rem); }
+.deadlineAlerts p { margin-bottom: 0; color: #617068; font-weight: 800; }
+.deadlineAlertsUrgent { border-color: #f1cf5a; background: linear-gradient(135deg, #fffdf2 0%, #f8fbf9 100%); }
+.deadlineAlertsOk { border-color: #bfe7c8; background: linear-gradient(135deg, #f3fff6 0%, #ffffff 100%); }
+.deadlineAlertsHeader { display: flex; justify-content: space-between; gap: 14px; align-items: center; }
+.deadlineAlertList { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+.deadlineAlertItem { display: grid; gap: 5px; padding: 12px; border: 1px solid #e7eee9; border-radius: 14px; background: rgb(255 255 255 / 82%); }
+.deadlineAlertItem strong { color: #142019; }
+.deadlineAlertItem span { width: fit-content; padding: 5px 8px; border-radius: 999px; background: #ffd75b; color: #123421; font-size: .82rem; font-weight: 900; }
+.deadlineAlertItem small { color: #617068; font-weight: 800; }
 .simulatorHero { max-width: none; margin-bottom: 18px; }
 .simulatorShell { display: grid; gap: 18px; }
 .simulatorGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 18px; }
@@ -279,12 +318,17 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
   .rankingHit { grid-template-columns: 1fr; }
   .newsFilters { grid-template-columns: 1fr; }
   .newsGrid { grid-template-columns: 1fr; }
+  .poolActionsGrid, .poolListItem, .poolDetailsGrid { grid-template-columns: 1fr; }
+  .poolContextBanner { align-items: flex-start; flex-direction: column; }
+  .poolContextActions { justify-content: flex-start; }
+  .poolMemberItem { align-items: flex-start; flex-direction: column; }
   .adminResultHeader { flex-direction: column; }
   .adminResultStatus { width: 100%; text-align: left; }
   .adminResultForm { grid-template-columns: 1fr; }
   .profileGrid { grid-template-columns: 1fr; }
   .profilePreview { align-items: flex-start; flex-direction: column; }
   .pageToolbar { align-items: flex-start; flex-direction: column; }
+  .deadlineAlertsHeader { align-items: flex-start; flex-direction: column; }
   .toolbarTips { justify-content: flex-start; }
   .stageTabs { gap: 0; justify-content: stretch; }
   .stageTab { flex: 1; min-width: 0; font-size: .75rem; }
