@@ -25,6 +25,7 @@ export async function AuthButton() {
       </summary>
       <div className="authMenuPanel">
         {session.user.email && <span className="authEmail">{session.user.email}</span>}
+        <Link className="authMenuItem" href="/perfil">Meu perfil</Link>
         <Link className="authMenuItem" href="/bolao">Meus palpites</Link>
         <Link className="authMenuItem" href="/ranking">Ranking</Link>
         <Link className="authMenuItem" href="/simulador">Simulador</Link>

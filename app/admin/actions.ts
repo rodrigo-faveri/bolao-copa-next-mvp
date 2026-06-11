@@ -40,6 +40,11 @@ export async function saveMatchResult(formData: FormData) {
   if (!result.success) throw new Error("Resultado inválido.");
 
   await prisma.$transaction(async (transaction) => {
+    const previousResult = await transaction.match.findUnique({
+      where: { id: result.data.matchId },
+      select: { resultGoalsA: true, resultGoalsB: true, finishedAt: true },
+    });
+
     await setMatchResult(transaction, result.data);
     await createAuditLog(transaction, {
       actorEmail: adminEmail,
@@ -47,6 +52,9 @@ export async function saveMatchResult(formData: FormData) {
       entity: "match",
       entityId: result.data.matchId,
       metadata: {
+        previousGoalsA: previousResult?.resultGoalsA ?? null,
+        previousGoalsB: previousResult?.resultGoalsB ?? null,
+        previousFinishedAt: previousResult?.finishedAt?.toISOString() ?? null,
         goalsA: result.data.goalsA,
         goalsB: result.data.goalsB,
       },

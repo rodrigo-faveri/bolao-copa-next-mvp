@@ -10,8 +10,8 @@ function getOutcome(goalsA: number, goalsB: number) {
   return Math.sign(goalsA - goalsB);
 }
 
-function formatUserName(user: { id: string; name: string | null }) {
-  return user.name?.trim() || `Participante ${user.id.slice(-6)}`;
+function formatUserName(user: { id: string; name: string | null; nickname: string | null }) {
+  return user.nickname?.trim() || user.name?.trim() || `Participante ${user.id.slice(-6)}`;
 }
 
 export default async function RankingPage() {
