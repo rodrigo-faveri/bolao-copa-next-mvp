@@ -137,6 +137,9 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .adminResultStatus { display: grid; gap: 4px; min-width: 120px; padding: 10px 12px; border-radius: 14px; background: #f8fbf9; text-align: right; }
 .adminResultStatus strong { color: #116530; font-size: 1.2rem; }
 .adminResultStatus span { color: #617068; font-size: .82rem; font-weight: 800; }
+.adminStatusForm { display: grid; grid-template-columns: minmax(180px, 1fr) auto; gap: 12px; align-items: end; padding: 12px; border: 1px solid #e7eee9; border-radius: 14px; background: #f8fbf9; }
+.adminStatusForm label { display: grid; gap: 6px; color: #617068; font-size: .82rem; font-weight: 900; }
+.adminStatusForm select { width: 100%; }
 .adminResultForm { display: grid; grid-template-columns: minmax(160px, 1fr) auto minmax(160px, 1fr) auto; gap: 12px; align-items: end; padding-top: 12px; border-top: 1px solid #e7eee9; }
 .adminResultForm label { display: grid; gap: 6px; color: #617068; font-size: .82rem; font-weight: 900; }
 .adminResultForm input { width: 100%; }
@@ -206,6 +209,34 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .deadlineAlertItem strong { color: #142019; }
 .deadlineAlertItem span { width: fit-content; padding: 5px 8px; border-radius: 999px; background: #ffd75b; color: #123421; font-size: .82rem; font-weight: 900; }
 .deadlineAlertItem small { color: #617068; font-weight: 800; }
+.badgeLive { display: inline-flex; gap: 7px; align-items: center; background: #dcfce7; color: #116530; }
+.livePulse { width: 8px; height: 8px; border-radius: 999px; background: #16a34a; box-shadow: 0 0 0 0 rgb(22 163 74 / 55%); animation: livePulse 1.6s ease-out infinite; }
+.matchLiveBadge { grid-column: 1 / -1; display: inline-flex; gap: 7px; align-items: center; width: fit-content; padding: 6px 10px; border: 1px solid rgb(22 163 74 / 24%); border-radius: 999px; background: #dcfce7; color: #116530; font-size: .78rem; font-weight: 900; text-decoration: none; }
+.matchLiveBadge:hover { background: #bbf7d0; color: #0f5132; }
+@keyframes livePulse {
+  70% { box-shadow: 0 0 0 8px rgb(22 163 74 / 0%); }
+  100% { box-shadow: 0 0 0 0 rgb(22 163 74 / 0%); }
+}
+.realTimeHero, .realTimeTimeline { margin-bottom: 18px; border: 1px solid #dce5df; border-radius: 22px; background: white; box-shadow: 0 14px 34px rgb(20 32 25 / 8%); }
+.realTimeHero { overflow: hidden; }
+.realTimeScoreboard { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 16px; align-items: center; padding: 24px; background: linear-gradient(135deg, #f8fbf9 0%, #fff8df 100%); }
+.realTimeTeam { display: flex; gap: 12px; align-items: center; font-size: clamp(1.2rem, 3vw, 2rem); }
+.realTimeTeamRight { justify-content: flex-end; text-align: right; }
+.realTimeTeam .teamFlag, .realTimeTeam .teamFlagPlaceholder { width: 46px; height: 32px; }
+.realTimeScore { display: grid; gap: 8px; justify-items: center; min-width: 130px; text-align: center; }
+.realTimeScore strong { color: #123421; font-size: clamp(2rem, 5vw, 3.4rem); line-height: 1; }
+.realTimeScore small { color: #617068; font-weight: 800; }
+.realTimeMeta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px 24px; color: #617068; font-weight: 800; }
+.realTimeMeta span, .realTimeMeta a { padding: 7px 10px; border-radius: 999px; background: #f4f7f5; }
+.realTimeMeta a { color: #116530; text-decoration: none; }
+.realTimeTimeline { display: grid; gap: 16px; padding: 22px; }
+.realTimeTimelineHeader h2 { margin: 8px 0 6px; font-size: clamp(1.4rem, 3vw, 2rem); }
+.realTimeTimelineHeader p { max-width: 760px; margin-bottom: 0; color: #617068; font-weight: 800; }
+.timelineList { display: grid; gap: 10px; }
+.timelineItem { display: grid; grid-template-columns: 74px 1fr; gap: 12px; padding: 14px; border: 1px solid #e7eee9; border-radius: 16px; background: #f8fbf9; }
+.timelineItem > span { display: grid; place-items: center; min-height: 42px; border-radius: 12px; background: white; color: #116530; font-weight: 900; }
+.timelineItem strong { display: block; margin-bottom: 4px; color: #142019; }
+.timelineItem p { margin-bottom: 0; color: #617068; }
 .simulatorHero { max-width: none; margin-bottom: 18px; }
 .simulatorShell { display: grid; gap: 18px; }
 .simulatorGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 18px; }
@@ -324,6 +355,7 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
   .poolMemberItem { align-items: flex-start; flex-direction: column; }
   .adminResultHeader { flex-direction: column; }
   .adminResultStatus { width: 100%; text-align: left; }
+  .adminStatusForm { grid-template-columns: 1fr; }
   .adminResultForm { grid-template-columns: 1fr; }
   .profileGrid { grid-template-columns: 1fr; }
   .profilePreview { align-items: flex-start; flex-direction: column; }
@@ -337,6 +369,9 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
   .matchActions { justify-content: stretch; }
   .matchActions button, .matchActions .saveHint { flex: 1; }
   .matchMeta { grid-template-columns: 34px 86px minmax(70px, 1fr) 44px; font-size: .78rem; }
+  .realTimeScoreboard { grid-template-columns: 1fr; text-align: center; }
+  .realTimeTeam, .realTimeTeamRight { justify-content: center; text-align: center; }
+  .timelineItem { grid-template-columns: 1fr; }
   .knockoutIntro { align-items: flex-start; flex-direction: column; padding: 22px; }
   .knockoutPhaseTabs { padding: 12px 16px; }
   .knockoutFocus { align-items: flex-start; flex-direction: column; padding: 14px 16px; }

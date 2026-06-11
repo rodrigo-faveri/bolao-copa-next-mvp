@@ -5,7 +5,7 @@ import { isAdminEmail } from "../../lib/access-control";
 import { MAX_GOALS } from "../../lib/prediction";
 import { prisma } from "../../lib/prisma";
 import { getMatchVenue } from "../../lib/venues";
-import { saveMatchResult } from "./actions";
+import { saveExternalFixtureId, saveMatchResult, saveMatchStatus } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +25,12 @@ const timeFormatter = new Intl.DateTimeFormat("pt-BR", {
 function formatMatchDate(startsAt: Date | null) {
   if (!startsAt) return "Sem data";
   return `${dateFormatter.format(startsAt)} às ${timeFormatter.format(startsAt)}`;
+}
+
+function formatMatchStatus(status: string, hasResult: boolean) {
+  if (hasResult || status === "finished") return "Encerrada";
+  if (status === "live") return "Ao vivo";
+  return "Agendada";
 }
 
 export default async function AdminPage() {
@@ -64,6 +70,7 @@ export default async function AdminPage() {
       <section className="adminResultsList">
         {matches.map((match) => {
           const hasResult = match.resultGoalsA !== null && match.resultGoalsB !== null;
+          const matchStatus = formatMatchStatus(match.status, hasResult);
 
           return (
             <article className="adminResultCard" key={match.id}>
@@ -75,9 +82,39 @@ export default async function AdminPage() {
                 </div>
                 <div className="adminResultStatus">
                   <strong>{hasResult ? `${match.resultGoalsA} x ${match.resultGoalsB}` : "Pendente"}</strong>
-                  <span>{match._count.predictions} palpite(s)</span>
+                  <span>{matchStatus} Â· {match._count.predictions} palpite(s)</span>
                 </div>
               </div>
+
+              {!hasResult && (
+                <form action={saveMatchStatus} className="adminStatusForm">
+                  <input name="matchId" type="hidden" value={match.id} />
+                  <label>
+                    <span>Status da partida</span>
+                    <select name="status" defaultValue={match.status}>
+                      <option value="scheduled">Agendada</option>
+                      <option value="live">Ao vivo</option>
+                    </select>
+                  </label>
+                  <button className="buttonSecondary" type="submit">Atualizar status</button>
+                </form>
+              )}
+
+              <form action={saveExternalFixtureId} className="adminStatusForm">
+                <input name="matchId" type="hidden" value={match.id} />
+                <label>
+                  <span>Fixture ID da API-Football</span>
+                  <input
+                    aria-label={`Fixture externo de ${match.teamA} x ${match.teamB}`}
+                    defaultValue={match.externalFixtureId ?? ""}
+                    min="1"
+                    name="externalFixtureId"
+                    placeholder="Ex.: 1234567"
+                    type="number"
+                  />
+                </label>
+                <button className="buttonSecondary" type="submit">Salvar fixture</button>
+              </form>
 
               <form action={saveMatchResult} className="adminResultForm">
                 <input name="matchId" type="hidden" value={match.id} />

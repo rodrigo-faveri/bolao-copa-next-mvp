@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { MAX_GOALS } from "../lib/prediction";
 import { getTeamFlagUrl } from "../lib/teams";
@@ -10,6 +11,7 @@ type SimulatorMatch = {
   teamA: string;
   teamB: string;
   startsAt: string | null;
+  status?: string | null;
   venue: string;
   isOpen: boolean;
   goalsA: number | null;
@@ -128,6 +130,18 @@ function formatCountdown(startsAt: Date | null, now: Date) {
   if (days > 0) return `Começa em ${days}d ${hours}h ${minutes}m ${seconds}s`;
   if (hours > 0) return `Começa em ${hours}h ${minutes}m ${seconds}s`;
   return `Começa em ${minutes}m ${seconds}s`;
+}
+
+function isMatchLive(status: string | null | undefined, startsAt: Date | null, now: Date, isHydrated: boolean) {
+  if (status === "live") return true;
+  if (status === "finished") return false;
+  if (!isHydrated || !startsAt) return false;
+
+  const startTime = startsAt.getTime();
+  const endTime = startTime + 130 * 60 * 1000;
+  const currentTime = now.getTime();
+
+  return currentTime >= startTime && currentTime <= endTime;
 }
 
 function makeInitialScores(matches: SimulatorMatch[]) {
@@ -550,6 +564,7 @@ export function WorldCupSimulator({
                     const inputsDisabled = !match.isOpen || hasOfficialResult;
                     const canSubmit = canSave && match.isOpen && !hasOfficialResult && score.goalsA !== "" && score.goalsB !== "" && Boolean(saveAction);
                     const aiState = aiAnalysisByMatch[match.id] ?? { status: "idle" };
+                    const matchIsLive = !hasOfficialResult && isMatchLive(match.status, startsAt, now, isHydrated);
 
                     return (
                       <form action={saveAction} className="simulatorMatch" key={match.id}>
@@ -564,6 +579,12 @@ export function WorldCupSimulator({
                             </span>
                           )}
                         </div>
+                        {matchIsLive && (
+                          <Link className="matchLiveBadge" href={`/tempo-real/${match.id}`}>
+                            <span className="livePulse" aria-hidden="true" />
+                            Ao vivo - acompanhar lances
+                          </Link>
+                        )}
                         <input type="hidden" name="matchId" value={match.id} />
                         <span className="teamName teamLeft">{flagFor(match.teamA)}<span>{match.teamA}</span></span>
                         <input aria-label={`Gols de ${match.teamA}`} disabled={inputsDisabled} max={MAX_GOALS} min="0" name="goalsA" onChange={(event) => setScores((current) => ({ ...current, [match.id]: { ...(current[match.id] ?? score), goalsA: event.target.value } }))} required type="number" value={score.goalsA} />

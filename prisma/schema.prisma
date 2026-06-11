@@ -71,6 +71,8 @@ model Match {
   mostLikelyScore    String?
   topScores          String?
   startsAt           DateTime?
+  status             String       @default("scheduled")
+  externalFixtureId  Int?
   resultGoalsA       Int?
   resultGoalsB       Int?
   finishedAt         DateTime?
@@ -78,6 +80,8 @@ model Match {
 
   @@unique([group, teamA, teamB])
   @@index([startsAt])
+  @@index([status])
+  @@index([externalFixtureId])
 }
 
 model Prediction {

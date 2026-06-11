@@ -10,6 +10,7 @@ App recreativo para palpites da Copa do Mundo de 2026 entre amigos, sem dinheiro
 - Prisma + PostgreSQL
 - Zod para validacao
 - OpenRouter opcional para sugestoes de IA
+- API-Football opcional para placar/lances em tempo real
 
 ## Recursos
 
@@ -21,6 +22,9 @@ App recreativo para palpites da Copa do Mundo de 2026 entre amigos, sem dinheiro
 - Jogos separados por grupo, rodada, data, horario e local.
 - Bandeiras das selecoes.
 - Contador regressivo por partida.
+- Badge clicavel de partida ao vivo dentro do proprio confronto.
+- Pagina de tempo real por partida com placar, status e linha do tempo.
+- Controle administrativo de status da partida: agendada ou ao vivo.
 - Alertas no bolao para palpites pendentes perto do fechamento.
 - Resultado oficial exibido separadamente do palpite do usuario.
 - Pontuacao automatica: 5 pontos para placar exato e 3 para resultado correto.
@@ -98,6 +102,11 @@ ADMIN_EMAILS=""
 
 OPENROUTER_API_KEY=""
 OPENROUTER_MODEL="nex-agi/nex-n2-pro:free"
+
+SPORTS_API_PROVIDER="api-football"
+API_FOOTBALL_KEY=""
+API_FOOTBALL_BASE_URL="https://v3.football.api-sports.io"
+SPORTS_API_CACHE_SECONDS="60"
 ```
 
 Notas:
@@ -110,6 +119,8 @@ Notas:
 - `ALLOWED_EMAILS` e `ALLOWED_EMAIL_DOMAINS` restringem quem pode entrar.
 - `ADMIN_EMAILS` define quem pode acessar `/admin`.
 - `OPENROUTER_API_KEY` e opcional. Sem chave, o app usa sugestao local.
+- `API_FOOTBALL_KEY` e opcional. Sem chave, a pagina de tempo real usa dados locais.
+- `SPORTS_API_CACHE_SECONDS` controla o cache das chamadas esportivas. O padrao de 60 segundos ajuda a preservar o plano free.
 
 ## Google OAuth
 
@@ -161,6 +172,30 @@ Ao registrar o resultado:
 - a partida fica encerrada;
 - os pontos dos palpites da partida sao recalculados.
 
+## Partidas ao Vivo e Tempo Real
+
+O badge `Ao vivo` aparece dentro do confronto e abre a pagina `/tempo-real/[matchId]`.
+
+A regra atual usa o status administrativo e a agenda cadastrada no banco:
+
+- uma partida marcada como `Ao vivo` no admin mostra imediatamente o badge no confronto;
+- uma partida aparece como ao vivo quando o horario de inicio ja passou;
+- ela permanece com o badge por uma janela estimada de 130 minutos;
+- quando o resultado oficial e registrado, ela vira `Encerrada` e deixa de aparecer como ao vivo.
+
+A pagina de tempo real tenta carregar placar, status e eventos pela API-Football quando a partida tem `Fixture ID` configurado no admin e `API_FOOTBALL_KEY` esta preenchida.
+
+Fluxo:
+
+1. Crie uma conta em `api-football.com`.
+2. Preencha `API_FOOTBALL_KEY` no `.env`.
+3. No painel `/admin`, salve o `Fixture ID da API-Football` em cada partida.
+4. Acesse `/tempo-real/[matchId]`.
+
+O app tambem expoe o endpoint interno `/api/live/match/[matchId]`, sempre server-side, para evitar expor a chave no navegador.
+
+Se a API nao estiver configurada, se o fixture nao existir ou se a cota acabar, a pagina usa fallback local baseado no status administrativo.
+
 ## Assistente de IA
 
 O botao `IA` em cada partida chama `/api/ai/match-analysis`.
@@ -196,6 +231,7 @@ Medidas atuais:
 - Headers como `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, `CSP` e `nosniff`.
 - HSTS em producao.
 - Chaves de IA ficam apenas no servidor.
+- Chaves de API esportiva ficam apenas no servidor.
 - Logs estruturados em JSON para login bloqueado, admin e IA.
 - Tabela `AuditLog` para eventos de negocio e seguranca: palpite salvo, resultado admin salvo e tentativa admin negada.
 - Auditoria tambem registra atualizacao de perfil.
