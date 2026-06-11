@@ -29,6 +29,7 @@ App recreativo para palpites da Copa do Mundo de 2026 entre amigos, sem dinheiro
 - Pagina de noticias com filtros.
 - Painel admin para registrar resultados e recalcular pontos.
 - Assistente de IA por partida usando OpenRouter, com fallback local gratuito.
+- Auditoria em banco para eventos sensiveis.
 - Headers de seguranca no Next.js.
 - Rate limit para salvar palpites e consultar IA.
 
@@ -76,6 +77,8 @@ AUTH_GOOGLE_SECRET="seu-google-client-secret"
 AUTH_URL="http://localhost:3000"
 
 ALLOW_UNSCHEDULED_PREDICTIONS="false"
+ENFORCE_HTTPS="true"
+RATE_LIMIT_DRIVER="memory"
 
 ALLOWED_EMAILS=""
 ALLOWED_EMAIL_DOMAINS=""
@@ -89,6 +92,8 @@ Notas:
 
 - Use `ALLOW_UNSCHEDULED_PREDICTIONS="true"` apenas em desenvolvimento.
 - Em producao, mantenha `ALLOW_UNSCHEDULED_PREDICTIONS="false"`.
+- `ENFORCE_HTTPS="true"` redireciona HTTP para HTTPS em producao.
+- `RATE_LIMIT_DRIVER="memory"` serve para uma unica instancia; para varias instancias use um driver distribuido.
 - `ALLOWED_EMAILS` e `ALLOWED_EMAIL_DOMAINS` restringem quem pode entrar.
 - `ADMIN_EMAILS` define quem pode acessar `/admin`.
 - `OPENROUTER_API_KEY` e opcional. Sem chave, o app usa sugestao local.
@@ -158,6 +163,7 @@ Voce pode trocar por outro modelo disponivel no OpenRouter, preferencialmente co
 
 Medidas atuais:
 
+- Redirecionamento HTTP para HTTPS em producao via middleware.
 - Auth.js com sessao no banco.
 - Middleware protegendo `/bolao`, `/ranking` e `/admin`.
 - Checagem server-side de usuario e admin.
@@ -166,7 +172,17 @@ Medidas atuais:
 - Rate limit por usuario para palpites e IA.
 - Resultado oficial nao sobrescreve palpite do usuario.
 - Headers como `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, `CSP` e `nosniff`.
+- HSTS em producao.
 - Chaves de IA ficam apenas no servidor.
+- Logs estruturados em JSON para login bloqueado, admin e IA.
+- Tabela `AuditLog` para eventos de negocio e seguranca: palpite salvo, resultado admin salvo e tentativa admin negada.
+- `npm run production:check` valida configuracoes sensiveis antes do deploy.
+
+Ainda recomendado antes de producao:
+
+- revisar CSP conforme novos dominios;
+- conectar logs e erros a uma plataforma de monitoramento;
+- usar rate limit distribuido em producao se houver varias instancias.
 
 ## Scripts
 
@@ -177,6 +193,7 @@ npm run start
 npm run lint
 npm test
 npm run check
+npm run production:check
 npm run prisma:generate
 npm run prisma:deploy
 npm run prisma:seed

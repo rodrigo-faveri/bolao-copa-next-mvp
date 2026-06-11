@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "../../../../auth";
+import { logger } from "../../../../lib/logger";
 import { MAX_GOALS } from "../../../../lib/prediction";
 import { prisma } from "../../../../lib/prisma";
 import { assertRateLimit } from "../../../../lib/rate-limit";
@@ -137,6 +138,7 @@ export async function POST(request: Request) {
 
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
+    logger.warn("ai_match_analysis_local_fallback", { reason: "missing_openrouter_key", matchId: parsedRequest.data.matchId });
     return NextResponse.json(makeLocalAnalysis(match, "sem chave do OpenRouter configurada"));
   }
 
@@ -175,10 +177,10 @@ export async function POST(request: Request) {
 
   if (!response.ok) {
     const responseBody = await response.text();
-    console.error("OpenRouter match analysis failed", {
+    logger.error("openrouter_match_analysis_failed", {
       status: response.status,
       model,
-      body: responseBody.slice(0, 1000),
+      bodyPreview: responseBody.slice(0, 500),
     });
     if ([402, 429, 500, 502, 503, 504].includes(response.status)) {
       return NextResponse.json(makeLocalAnalysis(match, getOpenRouterErrorMessage(response.status, responseBody)));
@@ -190,9 +192,9 @@ export async function POST(request: Request) {
   const rawResponse: unknown = await response.json();
   const outputText = getOutputText(rawResponse);
   if (!outputText) {
-    console.error("OpenRouter match analysis returned empty content", {
+    logger.error("openrouter_match_analysis_empty_content", {
       finishReason: getFinishReason(rawResponse),
-      response: JSON.stringify(rawResponse).slice(0, 1000),
+      responsePreview: JSON.stringify(rawResponse).slice(0, 500),
     });
     return NextResponse.json({ error: "A IA retornou uma resposta vazia." }, { status: 502 });
   }
@@ -202,17 +204,18 @@ export async function POST(request: Request) {
     const normalizedOutput = outputText.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
     parsedJson = JSON.parse(normalizedOutput);
   } catch {
-    console.error("OpenRouter match analysis returned invalid JSON", {
+    logger.error("openrouter_match_analysis_invalid_json", {
       finishReason: getFinishReason(rawResponse),
-      outputText: outputText.slice(0, 1000),
+      outputPreview: outputText.slice(0, 500),
     });
     return NextResponse.json(makeLocalAnalysis(match, "resposta invalida do OpenRouter"));
   }
   const parsedAnalysis = aiAnalysisSchema.safeParse(parsedJson);
   if (!parsedAnalysis.success) {
-    console.error("OpenRouter match analysis schema mismatch", parsedAnalysis.error.flatten());
+    logger.error("openrouter_match_analysis_schema_mismatch", { issues: JSON.stringify(parsedAnalysis.error.flatten()).slice(0, 500) });
     return NextResponse.json(makeLocalAnalysis(match, "formato inesperado do OpenRouter"));
   }
 
+  logger.info("openrouter_match_analysis_success", { model, matchId: parsedRequest.data.matchId });
   return NextResponse.json({ ...parsedAnalysis.data, source: "openrouter" });
 }
