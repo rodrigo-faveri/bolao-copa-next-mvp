@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "test": "tsc --module commonjs --target es2022 --outDir .tmp-tests --skipLibCheck lib/prediction.ts tests/prediction.test.ts && node .tmp-tests/tests/prediction.test.js",
     "check": "npm run lint && npm run test && npm run build",
+    "production:check": "tsx scripts/production-check.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",

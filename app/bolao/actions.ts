@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { auth } from "../../auth";
+import { createAuditLog } from "../../lib/audit";
 import { prisma } from "../../lib/prisma";
 import { isPredictionOpen, MAX_GOALS } from "../../lib/prediction";
 import { assertRateLimit } from "../../lib/rate-limit";
@@ -46,6 +47,18 @@ export async function savePrediction(formData: FormData) {
       where: { userId_matchId: { userId: user.id, matchId: result.data.matchId } },
       update: { goalsA: result.data.goalsA, goalsB: result.data.goalsB },
       create: { userId: user.id, matchId: result.data.matchId, goalsA: result.data.goalsA, goalsB: result.data.goalsB },
+    });
+
+    await createAuditLog(transaction, {
+      actorId: user.id,
+      actorEmail: email,
+      action: "prediction_saved",
+      entity: "match",
+      entityId: result.data.matchId,
+      metadata: {
+        goalsA: result.data.goalsA,
+        goalsB: result.data.goalsB,
+      },
     });
   });
 

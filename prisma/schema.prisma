@@ -92,3 +92,18 @@ model Prediction {
   @@index([userId])
   @@index([matchId])
 }
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actorEmail String?
+  action     String
+  entity     String?
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([action])
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
