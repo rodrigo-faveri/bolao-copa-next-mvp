@@ -24,6 +24,8 @@ App recreativo para palpites da Copa do Mundo de 2026 entre amigos, sem dinheiro
 - Resultado oficial exibido separadamente do palpite do usuario.
 - Pontuacao automatica: 5 pontos para placar exato e 3 para resultado correto.
 - Ranking com detalhes de acertos, sem expor e-mails.
+- Perfil publico com apelido e avatar por cor.
+- Historico de desempenho do usuario por rodada.
 - Simulador de fase de grupos com classificacao em tempo real.
 - Simulador de mata-mata por etapas.
 - Pagina de noticias com filtros.
@@ -39,6 +41,7 @@ App recreativo para palpites da Copa do Mundo de 2026 entre amigos, sem dinheiro
 - `/bolao`: palpites do usuario por rodada e aba de mata-mata.
 - `/simulador`: simulador de grupos e mata-mata.
 - `/ranking`: ranking geral com detalhes dos acertos.
+- `/perfil`: perfil publico, apelido, avatar e historico por rodada.
 - `/noticias`: noticias recentes com filtros por fonte, data e busca.
 - `/admin`: registro de resultados oficiais, restrito a admins.
 
@@ -176,6 +179,7 @@ Medidas atuais:
 - Chaves de IA ficam apenas no servidor.
 - Logs estruturados em JSON para login bloqueado, admin e IA.
 - Tabela `AuditLog` para eventos de negocio e seguranca: palpite salvo, resultado admin salvo e tentativa admin negada.
+- Auditoria tambem registra atualizacao de perfil.
 - `npm run production:check` valida configuracoes sensiveis antes do deploy.
 
 Ainda recomendado antes de producao:

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { AuthButton } from "./AuthButton";
 
-type ActivePage = "home" | "bolao" | "simulador" | "ranking" | "noticias" | "admin";
+type ActivePage = "home" | "bolao" | "simulador" | "ranking" | "noticias" | "admin" | "perfil";
 
 const navItems = [
   { href: "/", label: "Início", key: "home" },
