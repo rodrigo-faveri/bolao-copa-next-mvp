@@ -23,7 +23,7 @@ export async function savePrediction(formData: FormData) {
   const email = session?.user?.email;
   if (!email) throw new Error("Você precisa estar logado.");
 
-  assertRateLimit(`prediction:${email}`, predictionRateLimitMaxAttempts, predictionRateLimitWindowMs);
+  await assertRateLimit(`prediction:${email}`, predictionRateLimitMaxAttempts, predictionRateLimitWindowMs);
 
   const result = PredictionSchema.safeParse({
     matchId: formData.get("matchId"),

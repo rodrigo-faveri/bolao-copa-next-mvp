@@ -6,6 +6,25 @@ import { prisma } from "../../lib/prisma";
 
 export const dynamic = "force-dynamic";
 
+type RankingUser = {
+  id: string;
+  name: string | null;
+  nickname: string | null;
+  predictions: Array<{
+    goalsA: number;
+    goalsB: number;
+    points: number;
+    updatedAt: Date;
+    match: {
+      id: string;
+      teamA: string;
+      teamB: string;
+      resultGoalsA: number | null;
+      resultGoalsB: number | null;
+    };
+  }>;
+};
+
 function getOutcome(goalsA: number, goalsB: number) {
   return Math.sign(goalsA - goalsB);
 }
@@ -14,20 +33,8 @@ function formatUserName(user: { id: string; name: string | null; nickname: strin
   return user.nickname?.trim() || user.name?.trim() || `Participante ${user.id.slice(-6)}`;
 }
 
-export default async function RankingPage() {
-  const session = await auth();
-  if (!session?.user) redirect("/");
-
-  const users = await prisma.user.findMany({
-    include: {
-      predictions: {
-        include: { match: true },
-        orderBy: [{ points: "desc" }, { updatedAt: "desc" }],
-      },
-    },
-  });
-
-  const rankingRows: RankingRow[] = users
+function buildRankingRows(users: RankingUser[]) {
+  return users
     .map((user) => {
       const hits: RankingHit[] = [];
       let exactHits = 0;
@@ -58,6 +65,7 @@ export default async function RankingPage() {
 
       const points = user.predictions.reduce((sum, prediction) => sum + prediction.points, 0);
       const scoringHits = exactHits + outcomeHits;
+
       return {
         userId: user.id,
         name: formatUserName(user),
@@ -78,15 +86,49 @@ export default async function RankingPage() {
       || a.name.localeCompare(b.name),
     )
     .map((row, index) => ({ ...row, position: index + 1 }));
+}
 
+export default async function RankingPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
+  const session = await auth();
+  const email = session?.user?.email;
+  if (!email) redirect("/");
+
+  const params = await searchParams;
+  const poolInviteCode = typeof params?.bolao === "string" ? params.bolao.toUpperCase() : null;
+  let poolName: string | null = null;
+
+  if (poolInviteCode) {
+    const membership = await prisma.poolMember.findFirst({
+      where: {
+        user: { email },
+        pool: { inviteCode: poolInviteCode },
+      },
+      select: { pool: { select: { name: true } } },
+    });
+
+    if (!membership) redirect("/boloes");
+    poolName = membership.pool.name;
+  }
+
+  const users = await prisma.user.findMany({
+    where: poolInviteCode ? { poolMemberships: { some: { pool: { inviteCode: poolInviteCode } } } } : undefined,
+    include: {
+      predictions: {
+        include: { match: true },
+        orderBy: [{ points: "desc" }, { updatedAt: "desc" }],
+      },
+    },
+  });
+
+  const rankingRows: RankingRow[] = buildRankingRows(users);
   const podium = rankingRows.slice(0, 3);
 
   return (
     <main className="container bolaoPage">
       <CupHeader
         active="ranking"
-        title="Ranking"
-        description="Acompanhe quem está mandando melhor nos palpites da Copa."
+        title={poolName ? `Ranking: ${poolName}` : "Ranking"}
+        description={poolName ? "Acompanhe a disputa apenas entre participantes deste bolao privado." : "Acompanhe quem esta mandando melhor nos palpites da Copa."}
       />
 
       {podium.length > 0 && (
@@ -105,8 +147,8 @@ export default async function RankingPage() {
       <div className="rankingCard">
         <div className="rankingHeader">
           <div>
-            <span className="badge badgeGold">Classificação</span>
-            <h2>Participantes</h2>
+            <span className="badge badgeGold">Classificacao</span>
+            <h2>{poolName ? "Participantes do bolao" : "Participantes"}</h2>
           </div>
           <span className="muted">{rankingRows.length} jogador(es)</span>
         </div>
@@ -114,7 +156,7 @@ export default async function RankingPage() {
         {rankingRows.length > 0 ? (
           <RankingDetails rows={rankingRows} />
         ) : (
-          <p className="emptyRanking muted">O ranking aparecerá após o primeiro palpite.</p>
+          <p className="emptyRanking muted">O ranking aparecera apos o primeiro palpite.</p>
         )}
 
         <div className="rankingRules">

@@ -112,7 +112,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    assertRateLimit(`ai-match:${email}`, 12, 60 * 1000);
+    await assertRateLimit(`ai-match:${email}`, 12, 60 * 1000);
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Aguarde um minuto e tente novamente." }, { status: 429 });
   }

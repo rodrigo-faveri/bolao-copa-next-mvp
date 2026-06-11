@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { AuthButton } from "./AuthButton";
 
-type ActivePage = "home" | "bolao" | "simulador" | "ranking" | "noticias" | "admin" | "perfil";
+type ActivePage = "home" | "bolao" | "boloes" | "simulador" | "ranking" | "noticias" | "admin" | "perfil";
 
 const navItems = [
   { href: "/", label: "Início", key: "home" },
   { href: "/bolao", label: "Palpites", key: "bolao" },
+  { href: "/boloes", label: "Bolões", key: "boloes" },
   { href: "/simulador", label: "Simulador", key: "simulador" },
   { href: "/ranking", label: "Ranking", key: "ranking" },
   { href: "/noticias", label: "Notícias", key: "noticias" },

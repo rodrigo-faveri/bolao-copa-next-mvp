@@ -64,7 +64,11 @@ if (splitEnvList(process.env.ALLOWED_EMAILS).length === 0 && splitEnvList(proces
   warnings.push("ALLOWED_EMAILS and ALLOWED_EMAIL_DOMAINS are empty, so any verified Google account can sign in.");
 }
 
-if (process.env.RATE_LIMIT_DRIVER !== "redis") {
+if (process.env.RATE_LIMIT_DRIVER === "redis") {
+  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+    errors.push("RATE_LIMIT_DRIVER=redis requires UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN.");
+  }
+} else {
   warnings.push("RATE_LIMIT_DRIVER is not redis. In-memory rate limit does not protect multiple production instances.");
 }
 

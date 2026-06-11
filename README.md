@@ -21,6 +21,7 @@ App recreativo para palpites da Copa do Mundo de 2026 entre amigos, sem dinheiro
 - Jogos separados por grupo, rodada, data, horario e local.
 - Bandeiras das selecoes.
 - Contador regressivo por partida.
+- Alertas no bolao para palpites pendentes perto do fechamento.
 - Resultado oficial exibido separadamente do palpite do usuario.
 - Pontuacao automatica: 5 pontos para placar exato e 3 para resultado correto.
 - Ranking com detalhes de acertos, sem expor e-mails.
@@ -30,6 +31,10 @@ App recreativo para palpites da Copa do Mundo de 2026 entre amigos, sem dinheiro
 - Simulador de mata-mata por etapas.
 - Pagina de noticias com filtros.
 - Painel admin para registrar resultados e recalcular pontos.
+- Boloes privados com codigo/link de convite.
+- Ranking filtrado por bolao privado.
+- Pagina detalhada do bolao com membros e controles do dono.
+- Contexto de bolao privado na pagina de palpites com atalhos para ranking/detalhes.
 - Assistente de IA por partida usando OpenRouter, com fallback local gratuito.
 - Auditoria em banco para eventos sensiveis.
 - Headers de seguranca no Next.js.
@@ -39,8 +44,10 @@ App recreativo para palpites da Copa do Mundo de 2026 entre amigos, sem dinheiro
 
 - `/`: home com atalhos para as principais areas.
 - `/bolao`: palpites do usuario por rodada e aba de mata-mata.
+- `/boloes`: criar bolao privado, entrar por convite, listar grupos e abrir ranking privado.
+- `/boloes/[inviteCode]`: detalhes do bolao, membros, convite e configuracoes do dono.
 - `/simulador`: simulador de grupos e mata-mata.
-- `/ranking`: ranking geral com detalhes dos acertos.
+- `/ranking`: ranking geral ou ranking privado com `?bolao=CODIGO`.
 - `/perfil`: perfil publico, apelido, avatar e historico por rodada.
 - `/noticias`: noticias recentes com filtros por fonte, data e busca.
 - `/admin`: registro de resultados oficiais, restrito a admins.
@@ -82,6 +89,8 @@ AUTH_URL="http://localhost:3000"
 ALLOW_UNSCHEDULED_PREDICTIONS="false"
 ENFORCE_HTTPS="true"
 RATE_LIMIT_DRIVER="memory"
+UPSTASH_REDIS_REST_URL=""
+UPSTASH_REDIS_REST_TOKEN=""
 
 ALLOWED_EMAILS=""
 ALLOWED_EMAIL_DOMAINS=""
@@ -96,7 +105,8 @@ Notas:
 - Use `ALLOW_UNSCHEDULED_PREDICTIONS="true"` apenas em desenvolvimento.
 - Em producao, mantenha `ALLOW_UNSCHEDULED_PREDICTIONS="false"`.
 - `ENFORCE_HTTPS="true"` redireciona HTTP para HTTPS em producao.
-- `RATE_LIMIT_DRIVER="memory"` serve para uma unica instancia; para varias instancias use um driver distribuido.
+- `RATE_LIMIT_DRIVER="memory"` serve para uma unica instancia.
+- Para rate limit distribuido em producao, use `RATE_LIMIT_DRIVER="redis"` com `UPSTASH_REDIS_REST_URL` e `UPSTASH_REDIS_REST_TOKEN`.
 - `ALLOWED_EMAILS` e `ALLOWED_EMAIL_DOMAINS` restringem quem pode entrar.
 - `ADMIN_EMAILS` define quem pode acessar `/admin`.
 - `OPENROUTER_API_KEY` e opcional. Sem chave, o app usa sugestao local.
@@ -137,6 +147,14 @@ Resultados podem ser registrados pelo painel `/admin` ou pelo comando:
 npm run result:set -- <matchId> <golsA> <golsB>
 ```
 
+Tambem e possivel importar resultados em lote por CSV:
+
+```bash
+npm run result:import -- data/results.csv
+```
+
+Use `data/results.example.csv` como modelo. O CSV aceita `match_id` ou a combinacao `group`, `team_a`, `team_b`.
+
 Ao registrar o resultado:
 
 - o placar oficial fica separado do palpite do usuario;
@@ -168,11 +186,12 @@ Medidas atuais:
 
 - Redirecionamento HTTP para HTTPS em producao via middleware.
 - Auth.js com sessao no banco.
-- Middleware protegendo `/bolao`, `/ranking` e `/admin`.
+- Middleware protegendo `/bolao`, `/boloes`, `/ranking`, `/perfil` e `/admin`.
 - Checagem server-side de usuario e admin.
 - Allowlist opcional de e-mails/dominios.
 - Validacao com Zod em server actions e APIs.
 - Rate limit por usuario para palpites e IA.
+- Rate limit distribuido opcional via Redis REST/Upstash.
 - Resultado oficial nao sobrescreve palpite do usuario.
 - Headers como `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, `CSP` e `nosniff`.
 - HSTS em producao.
@@ -186,7 +205,7 @@ Ainda recomendado antes de producao:
 
 - revisar CSP conforme novos dominios;
 - conectar logs e erros a uma plataforma de monitoramento;
-- usar rate limit distribuido em producao se houver varias instancias.
+- configurar `RATE_LIMIT_DRIVER="redis"` antes de escalar para varias instancias.
 
 ## Scripts
 
@@ -202,6 +221,7 @@ npm run prisma:generate
 npm run prisma:deploy
 npm run prisma:seed
 npm run result:set -- <matchId> <golsA> <golsB>
+npm run result:import -- data/results.csv
 ```
 
 ## Verificacoes
@@ -222,11 +242,7 @@ npm run check
 
 ## Proximas Evolucoes
 
-- Bolao privado com convite/link.
 - Perfil publico com apelido e avatar.
 - Auditoria de alteracoes administrativas.
-- Importacao automatica de resultados oficiais.
-- Notificacoes de fechamento de palpites.
 - Testes de integracao com PostgreSQL.
-- Rate limit distribuido para producao.
 - Historico de desempenho do usuario por rodada.
