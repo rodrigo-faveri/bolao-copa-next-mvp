@@ -168,15 +168,6 @@ Medidas atuais:
 - Headers como `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, `CSP` e `nosniff`.
 - Chaves de IA ficam apenas no servidor.
 
-Ainda recomendado antes de producao:
-
-- usar HTTPS;
-- configurar banco com senha forte;
-- limitar admins;
-- revisar CSP conforme novos dominios;
-- monitorar logs e erros;
-- usar rate limit distribuido em producao se houver varias instancias.
-
 ## Scripts
 
 ```bash
