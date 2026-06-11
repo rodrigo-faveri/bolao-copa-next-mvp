@@ -38,6 +38,7 @@ export default async function SimuladorPage() {
             teamA: match.teamA,
             teamB: match.teamB,
             startsAt: match.startsAt?.toISOString() ?? null,
+            status: match.status,
             venue: getMatchVenue(match.group, match.teamA, match.teamB),
             isOpen: isPredictionOpen(match.startsAt, new Date(), allowUnscheduledPredictions),
             goalsA: prediction?.goalsA ?? null,

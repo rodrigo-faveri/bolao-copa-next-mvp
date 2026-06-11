@@ -37,7 +37,7 @@ export async function setMatchResult(
   updates.push(
     transaction.match.update({
       where: { id: matchId },
-      data: { resultGoalsA: goalsA, resultGoalsB: goalsB, finishedAt: new Date() },
+      data: { resultGoalsA: goalsA, resultGoalsB: goalsB, finishedAt: new Date(), status: "finished" },
     }),
   );
 
