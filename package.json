@@ -1,0 +1,42 @@
+{
+  "name": "bolao-copa-next-mvp",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "test": "tsc --module commonjs --target es2022 --outDir .tmp-tests --skipLibCheck lib/prediction.ts tests/prediction.test.ts && node .tmp-tests/tests/prediction.test.js",
+    "check": "npm run lint && npm run test && npm run build",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:seed": "tsx prisma/seed.ts",
+    "result:set": "tsx scripts/set-result.ts"
+  },
+  "dependencies": {
+    "@auth/prisma-adapter": "2.11.1",
+    "@prisma/client": "6.19.1",
+    "next": "15.5.9",
+    "next-auth": "5.0.0-beta.30",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "3.3.1",
+    "@types/node": "20.19.25",
+    "@types/react": "19.1.17",
+    "@types/react-dom": "19.1.11",
+    "eslint": "9.39.1",
+    "eslint-config-next": "15.5.9",
+    "prisma": "6.19.1",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=20.19.0 <21 || >=22.13.0"
+  },
+  "license": "UNLICENSED"
+}

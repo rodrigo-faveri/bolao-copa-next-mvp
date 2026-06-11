@@ -1,0 +1,73 @@
+group,team_a,team_b,starts_at
+A,Mexico,South Africa,2026-06-11T16:00:00-03:00
+A,Korea Republic,Czechia,2026-06-11T23:00:00-03:00
+B,Canada,Bosnia and Herzegovina,2026-06-12T16:00:00-03:00
+D,USA,Paraguay,2026-06-12T22:00:00-03:00
+B,Qatar,Switzerland,2026-06-13T16:00:00-03:00
+C,Brazil,Morocco,2026-06-13T19:00:00-03:00
+C,Haiti,Scotland,2026-06-13T22:00:00-03:00
+D,Australia,Türkiye,2026-06-14T01:00:00-03:00
+E,Germany,Curaçao,2026-06-14T14:00:00-03:00
+F,Netherlands,Japan,2026-06-14T17:00:00-03:00
+E,Côte d'Ivoire,Ecuador,2026-06-14T20:00:00-03:00
+F,Sweden,Tunisia,2026-06-14T23:00:00-03:00
+H,Spain,Cabo Verde,2026-06-15T13:00:00-03:00
+G,Belgium,Egypt,2026-06-15T16:00:00-03:00
+H,Saudi Arabia,Uruguay,2026-06-15T19:00:00-03:00
+G,IR Iran,New Zealand,2026-06-15T22:00:00-03:00
+I,France,Senegal,2026-06-16T16:00:00-03:00
+I,Iraq,Norway,2026-06-16T19:00:00-03:00
+J,Argentina,Algeria,2026-06-16T22:00:00-03:00
+J,Austria,Jordan,2026-06-17T01:00:00-03:00
+K,Portugal,Congo DR,2026-06-17T14:00:00-03:00
+L,England,Croatia,2026-06-17T17:00:00-03:00
+L,Ghana,Panama,2026-06-17T20:00:00-03:00
+K,Uzbekistan,Colombia,2026-06-17T23:00:00-03:00
+A,Czechia,South Africa,2026-06-18T13:00:00-03:00
+B,Switzerland,Bosnia and Herzegovina,2026-06-18T16:00:00-03:00
+B,Canada,Qatar,2026-06-18T19:00:00-03:00
+A,Mexico,Korea Republic,2026-06-18T22:00:00-03:00
+D,USA,Australia,2026-06-19T16:00:00-03:00
+C,Scotland,Morocco,2026-06-19T19:00:00-03:00
+C,Brazil,Haiti,2026-06-19T21:30:00-03:00
+D,Türkiye,Paraguay,2026-06-20T01:00:00-03:00
+F,Netherlands,Sweden,2026-06-20T14:00:00-03:00
+E,Germany,Côte d'Ivoire,2026-06-20T17:00:00-03:00
+E,Ecuador,Curaçao,2026-06-20T21:00:00-03:00
+F,Tunisia,Japan,2026-06-21T01:00:00-03:00
+H,Spain,Saudi Arabia,2026-06-21T13:00:00-03:00
+G,Belgium,IR Iran,2026-06-21T16:00:00-03:00
+H,Uruguay,Cabo Verde,2026-06-21T19:00:00-03:00
+G,New Zealand,Egypt,2026-06-21T22:00:00-03:00
+J,Argentina,Austria,2026-06-22T14:00:00-03:00
+I,France,Iraq,2026-06-22T18:00:00-03:00
+I,Norway,Senegal,2026-06-22T21:00:00-03:00
+J,Jordan,Algeria,2026-06-23T00:00:00-03:00
+K,Portugal,Uzbekistan,2026-06-23T14:00:00-03:00
+L,England,Ghana,2026-06-23T17:00:00-03:00
+L,Panama,Croatia,2026-06-23T20:00:00-03:00
+K,Colombia,Congo DR,2026-06-23T23:00:00-03:00
+B,Switzerland,Canada,2026-06-24T16:00:00-03:00
+B,Bosnia and Herzegovina,Qatar,2026-06-24T16:00:00-03:00
+C,Morocco,Haiti,2026-06-24T19:00:00-03:00
+C,Scotland,Brazil,2026-06-24T19:00:00-03:00
+A,South Africa,Korea Republic,2026-06-24T22:00:00-03:00
+A,Czechia,Mexico,2026-06-24T22:00:00-03:00
+E,Ecuador,Germany,2026-06-25T17:00:00-03:00
+E,Curaçao,Côte d'Ivoire,2026-06-25T17:00:00-03:00
+F,Tunisia,Netherlands,2026-06-25T20:00:00-03:00
+F,Japan,Sweden,2026-06-25T20:00:00-03:00
+D,Türkiye,USA,2026-06-25T23:00:00-03:00
+D,Paraguay,Australia,2026-06-25T23:00:00-03:00
+I,Senegal,Iraq,2026-06-26T16:00:00-03:00
+I,Norway,France,2026-06-26T16:00:00-03:00
+H,Cabo Verde,Saudi Arabia,2026-06-26T21:00:00-03:00
+H,Uruguay,Spain,2026-06-26T21:00:00-03:00
+G,Egypt,IR Iran,2026-06-27T00:00:00-03:00
+G,New Zealand,Belgium,2026-06-27T00:00:00-03:00
+L,Croatia,Ghana,2026-06-27T18:00:00-03:00
+L,Panama,England,2026-06-27T18:00:00-03:00
+K,Congo DR,Uzbekistan,2026-06-27T20:30:00-03:00
+K,Colombia,Portugal,2026-06-27T20:30:00-03:00
+J,Jordan,Argentina,2026-06-27T23:00:00-03:00
+J,Algeria,Austria,2026-06-27T23:00:00-03:00
