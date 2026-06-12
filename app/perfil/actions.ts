@@ -5,6 +5,7 @@ import { z } from "zod";
 import { auth } from "../../auth";
 import { createAuditLog } from "../../lib/audit";
 import { prisma } from "../../lib/prisma";
+import { assertRateLimit } from "../../lib/rate-limit";
 
 const allowedAvatarColors = ["#116530", "#0f766e", "#1d4ed8", "#7a4d00", "#9a3412", "#6d28d9"] as const;
 
@@ -17,6 +18,8 @@ export async function saveProfile(formData: FormData) {
   const session = await auth();
   const email = session?.user?.email;
   if (!email) throw new Error("Voce precisa estar logado.");
+
+  await assertRateLimit(`profile:update:${email}`, 10, 60 * 1000);
 
   const result = ProfileSchema.safeParse({
     nickname: formData.get("nickname"),

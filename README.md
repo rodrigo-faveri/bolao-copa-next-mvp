@@ -83,7 +83,21 @@ No Windows, se o build travar com `EPERM .next/trace`, pare processos Node e apa
 
 ## Variaveis de Ambiente
 
-Exemplo completo:
+Arquivos de referencia:
+
+- `.env.example`: lista geral de variaveis.
+- `.env.local.example`: sugestao para desenvolvimento local.
+- `.env.production.example`: sugestao para deploy.
+
+Para comecar localmente:
+
+```bash
+copy .env.local.example .env
+```
+
+Depois preencha `DATABASE_URL`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_URL` e `ADMIN_EMAILS`.
+
+Exemplo geral:
 
 ```env
 DATABASE_URL="postgresql://postgres:SENHA@localhost:5432/palpites?schema=public"
@@ -106,9 +120,9 @@ ADMIN_EMAILS=""
 OPENROUTER_API_KEY=""
 OPENROUTER_MODEL="nex-agi/nex-n2-pro:free"
 
-SERPAPI_KEY=""
-SERPAPI_RESULT_DELAY_MINUTES="130"
-SERPAPI_RESULT_MAX_MATCHES="4"
+API_FOOTBALL_KEY=""
+API_FOOTBALL_BASE_URL="https://v3.football.api-sports.io"
+SPORTS_API_CACHE_SECONDS="60"
 ```
 
 Notas:
@@ -121,9 +135,16 @@ Notas:
 - `ALLOWED_EMAILS` e `ALLOWED_EMAIL_DOMAINS` restringem quem pode entrar.
 - `ADMIN_EMAILS` define quem pode acessar `/admin`.
 - `OPENROUTER_API_KEY` e opcional. Sem chave, o app usa sugestao local.
-- `SERPAPI_KEY` e opcional. Sem chave, a sincronizacao semi-automatica de resultados fica desativada.
-- `SERPAPI_RESULT_DELAY_MINUTES` define quantos minutos apos o inicio o sync pode tentar buscar o resultado. Padrao: 130.
-- `SERPAPI_RESULT_MAX_MATCHES` limita quantas partidas sem resultado sao consultadas por execucao, preservando a cota.
+- `API_FOOTBALL_KEY` e opcional/legado. Sem chave, a pagina de tempo real usa dados locais.
+- `SPORTS_API_CACHE_SECONDS` controla o cache das chamadas esportivas. O padrao de 60 segundos ajuda a preservar o plano free.
+
+Para validar um arquivo de producao antes do deploy:
+
+```bash
+npm run production:check:prod
+```
+
+A verificacao falha se encontrar placeholders, HTTP em producao, senha fraca de banco, `ALLOW_UNSCHEDULED_PREDICTIONS=true`, admin fora da allowlist ou rate limit Redis incompleto.
 
 ## Google OAuth
 
@@ -243,7 +264,8 @@ Medidas atuais:
 - Checagem server-side de usuario e admin.
 - Allowlist opcional de e-mails/dominios.
 - Validacao com Zod em server actions e APIs.
-- Rate limit por usuario para palpites e IA.
+- Rate limit por usuario para palpites, IA, perfil, bolao privado e acoes administrativas.
+- Rate limit por IP no endpoint interno de tempo real.
 - Rate limit distribuido opcional via Redis REST/Upstash.
 - Resultado oficial nao sobrescreve palpite do usuario.
 - Headers como `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, `CSP` e `nosniff`.
@@ -252,7 +274,7 @@ Medidas atuais:
 - Logs estruturados em JSON para login bloqueado, admin e IA.
 - Tabela `AuditLog` para eventos de negocio e seguranca: palpite salvo, resultado admin salvo e tentativa admin negada.
 - Auditoria tambem registra atualizacao de perfil.
-- `npm run production:check` valida configuracoes sensiveis antes do deploy.
+- `npm run production:check` carrega `.env` e valida configuracoes sensiveis antes do deploy.
 
 Ainda recomendado antes de producao:
 
@@ -270,6 +292,7 @@ npm run lint
 npm test
 npm run check
 npm run production:check
+npm run production:check:prod
 npm run prisma:generate
 npm run prisma:deploy
 npm run prisma:seed

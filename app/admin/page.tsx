@@ -33,6 +33,53 @@ function formatMatchStatus(status: string, hasResult: boolean) {
   return "Agendada";
 }
 
+function maskEmail(email: string | null) {
+  if (!email) return "Sistema";
+  const [name, domain] = email.split("@");
+  if (!domain) return email;
+  return `${name.slice(0, 2)}***@${domain}`;
+}
+
+function readMetadata(metadata: unknown) {
+  return typeof metadata === "object" && metadata !== null ? metadata as Record<string, unknown> : {};
+}
+
+function formatAuditAction(action: string, metadata: unknown) {
+  const details = readMetadata(metadata);
+
+  if (action === "prediction_saved") {
+    return `Palpite salvo: ${details.goalsA ?? "?"} x ${details.goalsB ?? "?"}`;
+  }
+
+  if (action === "admin_result_saved") {
+    return `Resultado oficial salvo: ${details.goalsA ?? "?"} x ${details.goalsB ?? "?"}`;
+  }
+
+  if (action === "admin_match_status_saved") {
+    return `Status alterado para ${details.status === "live" ? "Ao vivo" : details.status ?? "Agendada"}`;
+  }
+
+  if (action === "admin_external_fixture_saved") {
+    return `Fixture externo atualizado para ${details.externalFixtureId ?? "vazio"}`;
+  }
+
+  if (action === "profile_updated") return "Perfil atualizado";
+  if (action === "pool_created") return `Bolao criado: ${details.name ?? "sem nome"}`;
+  if (action === "pool_joined") return "Usuario entrou em um bolao";
+  if (action === "pool_renamed") return `Bolao renomeado: ${details.name ?? "sem nome"}`;
+  if (action === "pool_invite_regenerated") return "Convite de bolao regenerado";
+  if (action === "pool_member_removed") return "Membro removido do bolao";
+  if (action.endsWith("_denied")) return "Tentativa negada";
+
+  return action.replaceAll("_", " ");
+}
+
+function formatAuditEntity(entity: string | null, entityId: string | null) {
+  if (!entity) return "Evento geral";
+  if (!entityId) return entity;
+  return `${entity} ${entityId.slice(0, 8)}`;
+}
+
 export default async function AdminPage() {
   const session = await auth();
 
@@ -43,6 +90,10 @@ export default async function AdminPage() {
   const matches = await prisma.match.findMany({
     include: { _count: { select: { events: true, predictions: true } } },
     orderBy: [{ startsAt: "asc" }, { group: "asc" }],
+  });
+  const auditLogs = await prisma.auditLog.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 12,
   });
 
   const finishedCount = matches.filter((match) => match.finishedAt).length;
@@ -65,6 +116,32 @@ export default async function AdminPage() {
           <span>{finishedCount} finalizada(s)</span>
           <span>{matches.length} partida(s)</span>
         </div>
+      </section>
+
+      <section className="adminActivityCard">
+        <div className="adminActivityHeader">
+          <div>
+            <span className="badge badgeGold">Auditoria</span>
+            <h2>Atividade recente</h2>
+          </div>
+          <span>{auditLogs.length} evento(s)</span>
+        </div>
+
+        {auditLogs.length === 0 ? (
+          <p className="muted">Nenhum evento registrado ainda.</p>
+        ) : (
+          <div className="adminActivityList">
+            {auditLogs.map((log) => (
+              <article className="adminActivityItem" key={log.id}>
+                <div>
+                  <strong>{formatAuditAction(log.action, log.metadata)}</strong>
+                  <span>{formatAuditEntity(log.entity, log.entityId)} · {maskEmail(log.actorEmail)}</span>
+                </div>
+                <time dateTime={log.createdAt.toISOString()}>{dateFormatter.format(log.createdAt)} {timeFormatter.format(log.createdAt)}</time>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="adminResultsList">

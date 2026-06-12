@@ -8,6 +8,7 @@ import { createAuditLog } from "../../lib/audit";
 import { logger } from "../../lib/logger";
 import { MAX_GOALS } from "../../lib/prediction";
 import { prisma } from "../../lib/prisma";
+import { assertRateLimit } from "../../lib/rate-limit";
 import { setMatchResult } from "../../lib/results";
 
 const ResultSchema = z.object({
@@ -36,16 +37,26 @@ const MatchLiveUrlSchema = z.object({
   ),
 });
 
-function assertAdmin(email: string | null, action: string) {
-  if (isAdminEmail(email)) return;
-  logger.warn(`${action}_denied`, { emailDomain: email?.split("@")[1]?.toLowerCase() ?? null });
-  throw new Error("Voce nao tem permissao para executar esta acao.");
+const adminActionRateLimitWindowMs = 60 * 1000;
+
+async function assertAdminAction(adminEmail: string | null, action: string) {
+  await assertRateLimit(`admin:any:${adminEmail ?? "anonymous"}`, 20, adminActionRateLimitWindowMs);
+
+  if (!isAdminEmail(adminEmail)) {
+    logger.warn(`${action}_denied`, { emailDomain: adminEmail?.split("@")[1]?.toLowerCase() ?? null });
+    await createAuditLog(prisma, {
+      actorEmail: adminEmail,
+      action: `${action}_denied`,
+    }).catch((error) => logger.error("audit_log_write_failed", { action: `${action}_denied`, message: error instanceof Error ? error.message : "unknown" }));
+    throw new Error("Voce nao tem permissao para executar esta acao.");
+  }
 }
 
 export async function saveMatchResult(formData: FormData) {
   const session = await auth();
   const adminEmail = session?.user?.email ?? null;
-  assertAdmin(adminEmail, "admin_result");
+  await assertAdminAction(adminEmail, "admin_result");
+  await assertRateLimit(`admin:result:${adminEmail}`, 30, adminActionRateLimitWindowMs);
 
   const result = ResultSchema.safeParse({
     matchId: formData.get("matchId"),
@@ -87,12 +98,14 @@ export async function saveMatchResult(formData: FormData) {
   revalidatePath("/ranking");
   revalidatePath("/bolao");
   revalidatePath("/simulador");
+  revalidatePath(`/tempo-real/${result.data.matchId}`);
 }
 
 export async function saveMatchStatus(formData: FormData) {
   const session = await auth();
   const adminEmail = session?.user?.email ?? null;
-  assertAdmin(adminEmail, "admin_status");
+  await assertAdminAction(adminEmail, "admin_status");
+  await assertRateLimit(`admin:status:${adminEmail}`, 30, adminActionRateLimitWindowMs);
 
   const result = MatchStatusSchema.safeParse({
     matchId: formData.get("matchId"),
@@ -104,7 +117,7 @@ export async function saveMatchStatus(formData: FormData) {
   await prisma.$transaction(async (transaction) => {
     const previousMatch = await transaction.match.findUnique({
       where: { id: result.data.matchId },
-      select: { status: true, resultGoalsA: true, resultGoalsB: true },
+      select: { status: true, finishedAt: true, resultGoalsA: true, resultGoalsB: true },
     });
 
     if (!previousMatch) throw new Error("Partida nao encontrada.");
@@ -141,67 +154,11 @@ export async function saveMatchStatus(formData: FormData) {
   revalidatePath(`/tempo-real/${result.data.matchId}`);
 }
 
-export async function saveMatchEvent(formData: FormData) {
-  const session = await auth();
-  const adminEmail = session?.user?.email ?? null;
-  assertAdmin(adminEmail, "admin_match_event");
-
-  const result = MatchEventSchema.safeParse({
-    matchId: formData.get("matchId"),
-    minute: formData.get("minute"),
-    title: formData.get("title"),
-    description: formData.get("description"),
-  });
-
-  if (!result.success) throw new Error("Lance invalido.");
-
-  let eventId = "";
-
-  await prisma.$transaction(async (transaction) => {
-    const match = await transaction.match.findUnique({
-      where: { id: result.data.matchId },
-      select: { id: true },
-    });
-
-    if (!match) throw new Error("Partida nao encontrada.");
-
-    const event = await transaction.matchEvent.create({
-      data: {
-        matchId: result.data.matchId,
-        minute: result.data.minute,
-        title: result.data.title,
-        description: result.data.description,
-      },
-    });
-    eventId = event.id;
-
-    await createAuditLog(transaction, {
-      actorEmail: adminEmail,
-      action: "admin_match_event_saved",
-      entity: "match_event",
-      entityId: event.id,
-      metadata: {
-        matchId: result.data.matchId,
-        minute: result.data.minute,
-        title: result.data.title,
-      },
-    });
-  });
-
-  logger.info("admin_match_event_saved", {
-    matchId: result.data.matchId,
-    eventId,
-    minute: result.data.minute,
-  });
-
-  revalidatePath("/admin");
-  revalidatePath(`/tempo-real/${result.data.matchId}`);
-}
-
 export async function saveMatchLiveUrl(formData: FormData) {
   const session = await auth();
   const adminEmail = session?.user?.email ?? null;
-  assertAdmin(adminEmail, "admin_match_live_url");
+  await assertAdminAction(adminEmail, "admin_live_url");
+  await assertRateLimit(`admin:live-url:${adminEmail}`, 30, adminActionRateLimitWindowMs);
 
   const result = MatchLiveUrlSchema.safeParse({
     matchId: formData.get("matchId"),
@@ -238,6 +195,61 @@ export async function saveMatchLiveUrl(formData: FormData) {
   logger.info("admin_match_live_url_saved", {
     matchId: result.data.matchId,
     hasLiveUrl: Boolean(result.data.liveUrl),
+  });
+
+  revalidatePath("/admin");
+  revalidatePath(`/tempo-real/${result.data.matchId}`);
+}
+
+export async function saveMatchEvent(formData: FormData) {
+  const session = await auth();
+  const adminEmail = session?.user?.email ?? null;
+  await assertAdminAction(adminEmail, "admin_match_event");
+  await assertRateLimit(`admin:event:${adminEmail}`, 30, adminActionRateLimitWindowMs);
+
+  const result = MatchEventSchema.safeParse({
+    matchId: formData.get("matchId"),
+    minute: formData.get("minute"),
+    title: formData.get("title"),
+    description: formData.get("description"),
+  });
+
+  if (!result.success) throw new Error("Lance invalido.");
+
+  await prisma.$transaction(async (transaction) => {
+    const match = await transaction.match.findUnique({
+      where: { id: result.data.matchId },
+      select: { id: true },
+    });
+
+    if (!match) throw new Error("Partida nao encontrada.");
+
+    const event = await transaction.matchEvent.create({
+      data: {
+        matchId: result.data.matchId,
+        minute: result.data.minute,
+        title: result.data.title,
+        description: result.data.description,
+      },
+      select: { id: true },
+    });
+
+    await createAuditLog(transaction, {
+      actorEmail: adminEmail,
+      action: "admin_match_event_saved",
+      entity: "match",
+      entityId: result.data.matchId,
+      metadata: {
+        eventId: event.id,
+        minute: result.data.minute,
+        title: result.data.title,
+      },
+    });
+  });
+
+  logger.info("admin_match_event_saved", {
+    matchId: result.data.matchId,
+    minute: result.data.minute,
   });
 
   revalidatePath("/admin");

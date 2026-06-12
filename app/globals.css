@@ -140,6 +140,17 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .poolMemberItem div { display: grid; gap: 4px; }
 .poolMemberItem strong { color: #142019; }
 .poolMemberItem span { color: #617068; font-size: .82rem; font-weight: 800; }
+.adminActivityCard { display: grid; gap: 14px; margin-bottom: 18px; padding: 18px; border: 1px solid #dce5df; border-radius: 22px; background: white; box-shadow: 0 12px 34px rgb(20 32 25 / 8%); }
+.adminActivityHeader { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.adminActivityHeader h2 { margin: 8px 0 0; font-size: clamp(1.35rem, 3vw, 2rem); }
+.adminActivityHeader > span { padding: 7px 10px; border-radius: 999px; background: #f4f7f5; color: #617068; font-size: .9rem; font-weight: 800; }
+.adminActivityList { display: grid; border: 1px solid #e7eee9; border-radius: 16px; overflow: hidden; }
+.adminActivityItem { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; border-bottom: 1px solid #e7eee9; background: #fbfdfb; }
+.adminActivityItem:last-child { border-bottom: 0; }
+.adminActivityItem div { display: grid; gap: 4px; min-width: 0; }
+.adminActivityItem strong { color: #142019; overflow-wrap: anywhere; }
+.adminActivityItem span { color: #617068; font-size: .82rem; font-weight: 800; overflow-wrap: anywhere; }
+.adminActivityItem time { color: #8a938e; font-size: .82rem; font-weight: 900; white-space: nowrap; }
 .adminResultsList { display: grid; gap: 14px; }
 .adminResultCard { display: grid; gap: 16px; padding: 18px; border: 1px solid #dce5df; border-radius: 18px; background: white; box-shadow: 0 12px 28px rgb(20 32 25 / 7%); }
 .adminResultHeader { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
@@ -305,6 +316,9 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .matchActions { display: flex; min-width: 0; gap: 7px; align-items: center; justify-content: flex-end; }
 .matchActions button { white-space: nowrap; }
 .matchActions button[type="submit"] { min-width: 74px; padding-inline: 12px; }
+.matchSaveFeedback { grid-column: 1 / -1; padding: 9px 12px; border-radius: 12px; font-size: .88rem; font-weight: 900; }
+.matchSaveSuccess { border: 1px solid #bbf7d0; background: #ecfdf3; color: #116530; }
+.matchSaveError { border: 1px solid #fecaca; background: #fff1f2; color: #9a3412; }
 .aiHelpButton { min-width: 42px; padding: 10px 11px; border: 1px solid #f1cf5a; background: #fff7d6; color: #7a4d00; }
 .aiHelpButton:hover:not(:disabled) { background: #ffd75b; color: #123421; }
 .matchResultSummary { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: #617068; font-size: .84rem; }
@@ -394,6 +408,9 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
   .poolContextBanner { align-items: flex-start; flex-direction: column; }
   .poolContextActions { justify-content: flex-start; }
   .poolMemberItem { align-items: flex-start; flex-direction: column; }
+  .adminActivityHeader { align-items: flex-start; flex-direction: column; }
+  .adminActivityItem { grid-template-columns: 1fr; }
+  .adminActivityItem time { white-space: normal; }
   .adminResultHeader { flex-direction: column; }
   .adminResultStatus { width: 100%; text-align: left; }
   .adminStatusForm { grid-template-columns: 1fr; }

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MAX_GOALS } from "../lib/prediction";
 import { getTeamFlagUrl } from "../lib/teams";
 
@@ -40,6 +40,12 @@ type MatchAiState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "ready"; analysis: MatchAiAnalysis }
+  | { status: "error"; message: string };
+
+type SaveFeedback =
+  | { status: "idle" }
+  | { status: "saving" }
+  | { status: "saved"; message: string }
   | { status: "error"; message: string };
 
 type Standing = {
@@ -343,10 +349,16 @@ export function WorldCupSimulator({
   const [now, setNow] = useState(() => new Date());
   const [isHydrated, setIsHydrated] = useState(false);
   const [aiAnalysisByMatch, setAiAnalysisByMatch] = useState<Record<string, MatchAiState>>({});
+  const [saveFeedbackByMatch, setSaveFeedbackByMatch] = useState<Record<string, SaveFeedback>>({});
+  const saveFeedbackTimers = useRef<Record<string, number>>({});
   useEffect(() => {
+    const timers = saveFeedbackTimers.current;
     setIsHydrated(true);
     const interval = window.setInterval(() => setNow(new Date()), 1000);
-    return () => window.clearInterval(interval);
+    return () => {
+      window.clearInterval(interval);
+      for (const timer of Object.values(timers)) window.clearTimeout(timer);
+    };
   }, []);
   const groups = useMemo<SimulatorGroup[]>(() => {
     const byGroup = new Map<string, SimulatorMatch[]>();
@@ -395,6 +407,61 @@ export function WorldCupSimulator({
       ...current,
       [matchId]: { goalsA: String(goalsA), goalsB: String(goalsB) },
     }));
+    clearSaveFeedback(matchId);
+  }
+
+  function clearSaveFeedback(matchId: string) {
+    const timer = saveFeedbackTimers.current[matchId];
+    if (timer) window.clearTimeout(timer);
+    delete saveFeedbackTimers.current[matchId];
+    setSaveFeedbackByMatch((current) => {
+      if (!current[matchId]) return current;
+      const next = { ...current };
+      delete next[matchId];
+      return next;
+    });
+  }
+
+  function showTemporarySaveFeedback(matchId: string, feedback: SaveFeedback) {
+    const timer = saveFeedbackTimers.current[matchId];
+    if (timer) window.clearTimeout(timer);
+
+    setSaveFeedbackByMatch((current) => ({ ...current, [matchId]: feedback }));
+
+    if (feedback.status === "saved") {
+      saveFeedbackTimers.current[matchId] = window.setTimeout(() => {
+        setSaveFeedbackByMatch((current) => {
+          const currentFeedback = current[matchId];
+          if (currentFeedback?.status !== "saved") return current;
+          const next = { ...current };
+          delete next[matchId];
+          return next;
+        });
+        delete saveFeedbackTimers.current[matchId];
+      }, 3500);
+    }
+  }
+
+  function handleScoreChange(matchId: string, nextScore: Score) {
+    clearSaveFeedback(matchId);
+    setScores((current) => ({ ...current, [matchId]: nextScore }));
+  }
+
+  async function handleSavePrediction(matchId: string, formData: FormData) {
+    if (!saveAction) return;
+
+    closeMatchAnalysis(matchId);
+    setSaveFeedbackByMatch((current) => ({ ...current, [matchId]: { status: "saving" } }));
+
+    try {
+      await saveAction(formData);
+      showTemporarySaveFeedback(matchId, { status: "saved", message: "Palpite salvo!" });
+    } catch (error) {
+      showTemporarySaveFeedback(matchId, {
+        status: "error",
+        message: error instanceof Error ? error.message : "Nao foi possivel salvar o palpite.",
+      });
+    }
   }
 
   async function requestMatchAnalysis(matchId: string) {
@@ -565,10 +632,12 @@ export function WorldCupSimulator({
                     const inputsDisabled = !match.isOpen || hasOfficialResult;
                     const canSubmit = canSave && match.isOpen && !hasOfficialResult && score.goalsA !== "" && score.goalsB !== "" && Boolean(saveAction);
                     const aiState = aiAnalysisByMatch[match.id] ?? { status: "idle" };
+                    const saveFeedback = saveFeedbackByMatch[match.id] ?? { status: "idle" };
+                    const isSaving = saveFeedback.status === "saving";
                     const matchIsLive = !hasOfficialResult && isMatchLive(match.status, startsAt, now, isHydrated);
 
                     return (
-                      <form action={saveAction} className="simulatorMatch" key={match.id}>
+                      <form action={saveAction ? (formData) => handleSavePrediction(match.id, formData) : undefined} className="simulatorMatch" key={match.id}>
                         <div className="matchMeta">
                           <span>{startsAt ? formatWeekday(startsAt) : "--"}</span>
                           <strong>{startsAt ? dateFormatter.format(startsAt) : "Sem data"}</strong>
@@ -588,16 +657,18 @@ export function WorldCupSimulator({
                         )}
                         <input type="hidden" name="matchId" value={match.id} />
                         <span className="teamName teamLeft">{flagFor(match.teamA)}<span>{match.teamA}</span></span>
-                        <input aria-label={`Gols de ${match.teamA}`} disabled={inputsDisabled} max={MAX_GOALS} min="0" name="goalsA" onChange={(event) => setScores((current) => ({ ...current, [match.id]: { ...(current[match.id] ?? score), goalsA: event.target.value } }))} required type="number" value={score.goalsA} />
+                        <input aria-label={`Gols de ${match.teamA}`} disabled={inputsDisabled || isSaving} max={MAX_GOALS} min="0" name="goalsA" onChange={(event) => handleScoreChange(match.id, { ...score, goalsA: event.target.value })} required type="number" value={score.goalsA} />
                         <span className="versus">x</span>
-                        <input aria-label={`Gols de ${match.teamB}`} disabled={inputsDisabled} max={MAX_GOALS} min="0" name="goalsB" onChange={(event) => setScores((current) => ({ ...current, [match.id]: { ...(current[match.id] ?? score), goalsB: event.target.value } }))} required type="number" value={score.goalsB} />
+                        <input aria-label={`Gols de ${match.teamB}`} disabled={inputsDisabled || isSaving} max={MAX_GOALS} min="0" name="goalsB" onChange={(event) => handleScoreChange(match.id, { ...score, goalsB: event.target.value })} required type="number" value={score.goalsB} />
                         <span className="teamName teamRight">{flagFor(match.teamB)}<span>{match.teamB}</span></span>
                         <div className="matchActions">
-                          {hasOfficialResult ? <span className="saveHint">Encerrado</span> : canSave ? <button disabled={!canSubmit} type="submit">Salvar</button> : <span className="saveHint">Entre para salvar</span>}
+                          {hasOfficialResult ? <span className="saveHint">Encerrado</span> : canSave ? <button disabled={!canSubmit || isSaving} type="submit">{isSaving ? "Salvando..." : "Salvar"}</button> : <span className="saveHint">Entre para salvar</span>}
                           <button className="aiHelpButton" disabled={hasOfficialResult || aiState.status === "loading"} onClick={() => requestMatchAnalysis(match.id)} type="button">
                             {aiState.status === "loading" ? "..." : "IA"}
                           </button>
                         </div>
+                        {saveFeedback.status === "saved" && <div className="matchSaveFeedback matchSaveSuccess" role="status">{saveFeedback.message}</div>}
+                        {saveFeedback.status === "error" && <div className="matchSaveFeedback matchSaveError" role="alert">{saveFeedback.message}</div>}
                         {hasOfficialResult && (
                           <div className="matchResultSummary">
                             <span>Resultado final: <strong>{match.resultGoalsA} x {match.resultGoalsB}</strong></span>

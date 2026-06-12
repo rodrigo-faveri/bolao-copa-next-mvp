@@ -24,6 +24,12 @@ const aiAnalysisSchema = z.object({
   source: z.enum(["openrouter", "local"]).default("openrouter"),
 });
 
+function jsonNoStore(body: unknown, init?: ResponseInit) {
+  const response = NextResponse.json(body, init);
+  response.headers.set("Cache-Control", "no-store");
+  return response;
+}
+
 type MatchForAnalysis = {
   group: string;
   teamA: string;
@@ -108,19 +114,19 @@ export async function POST(request: Request) {
   const session = await auth();
   const email = session?.user?.email;
   if (!email) {
-    return NextResponse.json({ error: "Faca login para usar a IA." }, { status: 401 });
+    return jsonNoStore({ error: "Faca login para usar a IA." }, { status: 401 });
   }
 
   try {
     await assertRateLimit(`ai-match:${email}`, 12, 60 * 1000);
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Aguarde um minuto e tente novamente." }, { status: 429 });
+    return jsonNoStore({ error: error instanceof Error ? error.message : "Aguarde um minuto e tente novamente." }, { status: 429 });
   }
 
   const body = await request.json().catch(() => null);
   const parsedRequest = requestSchema.safeParse(body);
   if (!parsedRequest.success) {
-    return NextResponse.json({ error: "Partida invalida." }, { status: 400 });
+    return jsonNoStore({ error: "Partida invalida." }, { status: 400 });
   }
 
   const match = await prisma.match.findUnique({
@@ -129,17 +135,17 @@ export async function POST(request: Request) {
   });
 
   if (!match) {
-    return NextResponse.json({ error: "Partida nao encontrada." }, { status: 404 });
+    return jsonNoStore({ error: "Partida nao encontrada." }, { status: 404 });
   }
 
   if (match.resultGoalsA !== null && match.resultGoalsB !== null) {
-    return NextResponse.json({ error: "Esta partida ja tem resultado final." }, { status: 409 });
+    return jsonNoStore({ error: "Esta partida ja tem resultado final." }, { status: 409 });
   }
 
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     logger.warn("ai_match_analysis_local_fallback", { reason: "missing_openrouter_key", matchId: parsedRequest.data.matchId });
-    return NextResponse.json(makeLocalAnalysis(match, "sem chave do OpenRouter configurada"));
+    return jsonNoStore(makeLocalAnalysis(match, "sem chave do OpenRouter configurada"));
   }
 
   const model = process.env.OPENROUTER_MODEL || "nex-agi/nex-n2-pro:free";
@@ -183,10 +189,10 @@ export async function POST(request: Request) {
       bodyPreview: responseBody.slice(0, 500),
     });
     if ([402, 429, 500, 502, 503, 504].includes(response.status)) {
-      return NextResponse.json(makeLocalAnalysis(match, getOpenRouterErrorMessage(response.status, responseBody)));
+      return jsonNoStore(makeLocalAnalysis(match, getOpenRouterErrorMessage(response.status, responseBody)));
     }
 
-    return NextResponse.json({ error: getOpenRouterErrorMessage(response.status, responseBody) }, { status: 502 });
+    return jsonNoStore({ error: getOpenRouterErrorMessage(response.status, responseBody) }, { status: 502 });
   }
 
   const rawResponse: unknown = await response.json();
@@ -196,7 +202,7 @@ export async function POST(request: Request) {
       finishReason: getFinishReason(rawResponse),
       responsePreview: JSON.stringify(rawResponse).slice(0, 500),
     });
-    return NextResponse.json({ error: "A IA retornou uma resposta vazia." }, { status: 502 });
+    return jsonNoStore({ error: "A IA retornou uma resposta vazia." }, { status: 502 });
   }
 
   let parsedJson: unknown;
@@ -208,14 +214,14 @@ export async function POST(request: Request) {
       finishReason: getFinishReason(rawResponse),
       outputPreview: outputText.slice(0, 500),
     });
-    return NextResponse.json(makeLocalAnalysis(match, "resposta invalida do OpenRouter"));
+    return jsonNoStore(makeLocalAnalysis(match, "resposta invalida do OpenRouter"));
   }
   const parsedAnalysis = aiAnalysisSchema.safeParse(parsedJson);
   if (!parsedAnalysis.success) {
     logger.error("openrouter_match_analysis_schema_mismatch", { issues: JSON.stringify(parsedAnalysis.error.flatten()).slice(0, 500) });
-    return NextResponse.json(makeLocalAnalysis(match, "formato inesperado do OpenRouter"));
+    return jsonNoStore(makeLocalAnalysis(match, "formato inesperado do OpenRouter"));
   }
 
   logger.info("openrouter_match_analysis_success", { model, matchId: parsedRequest.data.matchId });
-  return NextResponse.json({ ...parsedAnalysis.data, source: "openrouter" });
+  return jsonNoStore({ ...parsedAnalysis.data, source: "openrouter" });
 }

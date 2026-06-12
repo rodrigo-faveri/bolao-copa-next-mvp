@@ -7,6 +7,7 @@ import { z } from "zod";
 import { auth } from "../../auth";
 import { createAuditLog } from "../../lib/audit";
 import { prisma } from "../../lib/prisma";
+import { assertRateLimit } from "../../lib/rate-limit";
 
 const PoolNameSchema = z.object({
   name: z.string().trim().min(3, "Nome muito curto.").max(48, "Nome muito longo."),
@@ -24,6 +25,8 @@ const RemoveMemberSchema = z.object({
   poolId: z.string().cuid(),
   memberId: z.string().cuid(),
 });
+
+const poolActionRateLimitWindowMs = 60 * 1000;
 
 function makeInviteCode() {
   return randomBytes(6).toString("base64url").replace(/[-_]/g, "").slice(0, 8).toUpperCase();
@@ -52,6 +55,8 @@ async function assertPoolOwner(poolId: string, userId: string) {
 
 export async function createPool(formData: FormData) {
   const user = await getCurrentUser();
+  await assertRateLimit(`pool:create:${user.email}`, 5, poolActionRateLimitWindowMs);
+
   const result = PoolNameSchema.safeParse({ name: formData.get("name") });
   if (!result.success) throw new Error("Nome de bolao invalido.");
 
@@ -91,6 +96,8 @@ export async function createPool(formData: FormData) {
 
 export async function joinPool(formData: FormData) {
   const user = await getCurrentUser();
+  await assertRateLimit(`pool:join:${user.email}`, 12, poolActionRateLimitWindowMs);
+
   const result = InviteCodeSchema.safeParse({ inviteCode: formData.get("inviteCode") });
   if (!result.success) throw new Error("Codigo de convite invalido.");
 
@@ -123,6 +130,8 @@ export async function joinPool(formData: FormData) {
 
 export async function renamePool(formData: FormData) {
   const user = await getCurrentUser();
+  await assertRateLimit(`pool:rename:${user.email}`, 10, poolActionRateLimitWindowMs);
+
   const poolResult = PoolIdSchema.safeParse({ poolId: formData.get("poolId") });
   const nameResult = PoolNameSchema.safeParse({ name: formData.get("name") });
   if (!poolResult.success || !nameResult.success) throw new Error("Dados invalidos.");
@@ -154,6 +163,8 @@ export async function renamePool(formData: FormData) {
 
 export async function regeneratePoolInvite(formData: FormData) {
   const user = await getCurrentUser();
+  await assertRateLimit(`pool:invite:${user.email}`, 5, poolActionRateLimitWindowMs);
+
   const result = PoolIdSchema.safeParse({ poolId: formData.get("poolId") });
   if (!result.success) throw new Error("Bolao invalido.");
 
@@ -197,6 +208,8 @@ export async function regeneratePoolInvite(formData: FormData) {
 
 export async function removePoolMember(formData: FormData) {
   const user = await getCurrentUser();
+  await assertRateLimit(`pool:remove-member:${user.email}`, 10, poolActionRateLimitWindowMs);
+
   const result = RemoveMemberSchema.safeParse({
     poolId: formData.get("poolId"),
     memberId: formData.get("memberId"),

@@ -1,8 +1,74 @@
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+const checkedEnvNames = [
+  "DATABASE_URL",
+  "AUTH_SECRET",
+  "AUTH_GOOGLE_ID",
+  "AUTH_GOOGLE_SECRET",
+  "AUTH_URL",
+  "ALLOW_UNSCHEDULED_PREDICTIONS",
+  "ENFORCE_HTTPS",
+  "RATE_LIMIT_DRIVER",
+  "UPSTASH_REDIS_REST_URL",
+  "UPSTASH_REDIS_REST_TOKEN",
+  "ALLOWED_EMAILS",
+  "ALLOWED_EMAIL_DOMAINS",
+  "ADMIN_EMAILS",
+  "OPENROUTER_API_KEY",
+  "API_FOOTBALL_KEY",
+];
+
+function getEnvFileArg() {
+  const prefix = "--check-env-file=";
+  const value = process.argv.find((arg) => arg.startsWith(prefix));
+  if (value) return value.slice(prefix.length);
+  return process.env.PRODUCTION_CHECK_ENV_FILE || ".env";
+}
+
+function loadDotEnv(fileName = ".env") {
+  const envPath = resolve(process.cwd(), fileName);
+  if (!existsSync(envPath)) {
+    warnings.push(`Env file ${fileName} was not found. Falling back to current process environment.`);
+    return;
+  }
+
+  const content = readFileSync(envPath, "utf8");
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+
+    const separatorIndex = line.indexOf("=");
+    if (separatorIndex <= 0) continue;
+
+    const key = line.slice(0, separatorIndex).trim();
+    let value = line.slice(separatorIndex + 1).trim();
+
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+
+    process.env[key] = value;
+  }
+}
+
 function splitEnvList(value?: string) {
   return (value ?? "")
     .split(",")
-    .map((item) => item.trim())
+    .map((item) => item.trim().toLowerCase())
     .filter(Boolean);
+}
+
+function isEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function isEmailAllowedByConfig(email: string, allowedEmails: string[], allowedDomains: string[]) {
+  if (allowedEmails.length === 0 && allowedDomains.length === 0) return true;
+  if (allowedEmails.includes(email)) return true;
+
+  const emailDomain = email.split("@")[1];
+  return Boolean(emailDomain && allowedDomains.map((domain) => domain.replace(/^@/, "")).includes(emailDomain));
 }
 
 function parseDatabaseUrl(value?: string) {
@@ -14,8 +80,22 @@ function parseDatabaseUrl(value?: string) {
   }
 }
 
+function hasPlaceholder(value: string | undefined, placeholders: string[]) {
+  const normalized = (value ?? "").toLowerCase();
+  return placeholders.some((placeholder) => normalized.includes(placeholder));
+}
+
 const errors: string[] = [];
 const warnings: string[] = [];
+
+const envFile = getEnvFileArg();
+if (existsSync(resolve(process.cwd(), envFile))) {
+  for (const name of checkedEnvNames) {
+    delete process.env[name];
+  }
+}
+
+loadDotEnv(envFile);
 
 function requireEnv(name: string) {
   if (!process.env[name]) errors.push(`${name} is required.`);
@@ -27,13 +107,42 @@ requireEnv("AUTH_GOOGLE_ID");
 requireEnv("AUTH_GOOGLE_SECRET");
 requireEnv("AUTH_URL");
 
+const placeholderChecks: Array<[string, string[]]> = [
+  ["DATABASE_URL", ["user:", "senha_local", "senha_forte", "@host", "/database"]],
+  ["AUTH_SECRET", ["gere-com", "gere-uma", "npx-auth-secret"]],
+  ["AUTH_GOOGLE_ID", ["seu-google", "google-client-id"]],
+  ["AUTH_GOOGLE_SECRET", ["seu-google", "google-client-secret"]],
+  ["AUTH_URL", ["seudominio.com"]],
+  ["UPSTASH_REDIS_REST_URL", ["seu-redis"]],
+  ["UPSTASH_REDIS_REST_TOKEN", ["seu-token"]],
+];
+
+for (const [name, placeholders] of placeholderChecks) {
+  if (hasPlaceholder(process.env[name], placeholders)) {
+    errors.push(`${name} still contains a placeholder value.`);
+  }
+}
+
 const authUrl = process.env.AUTH_URL;
 if (authUrl && !authUrl.startsWith("https://")) {
   errors.push("AUTH_URL must use https:// in production.");
 }
 
+if (authUrl) {
+  const parsedAuthUrl = parseDatabaseUrl(authUrl);
+  if (!parsedAuthUrl) {
+    errors.push("AUTH_URL must be a valid URL.");
+  } else if (["localhost", "127.0.0.1"].includes(parsedAuthUrl.hostname)) {
+    warnings.push("AUTH_URL points to localhost. That is usually wrong for production.");
+  }
+}
+
 if ((process.env.AUTH_SECRET ?? "").length < 32) {
   errors.push("AUTH_SECRET must be at least 32 characters.");
+}
+
+if (process.env.ENFORCE_HTTPS === "false") {
+  errors.push("ENFORCE_HTTPS must not be false in production.");
 }
 
 if (process.env.ALLOW_UNSCHEDULED_PREDICTIONS === "true") {
@@ -47,6 +156,10 @@ if (!databaseUrl) {
   const password = decodeURIComponent(databaseUrl.password);
   const weakPasswords = new Set(["", "postgres", "password", "senha", "admin", "123456", "12345678"]);
 
+  if (!["postgresql:", "postgres:"].includes(databaseUrl.protocol)) {
+    errors.push("DATABASE_URL must use the postgresql:// protocol.");
+  }
+
   if (["localhost", "127.0.0.1"].includes(databaseUrl.hostname)) {
     warnings.push("DATABASE_URL points to localhost. That is usually wrong for production.");
   }
@@ -56,12 +169,30 @@ if (!databaseUrl) {
   }
 }
 
-if (splitEnvList(process.env.ADMIN_EMAILS).length === 0) {
+const adminEmails = splitEnvList(process.env.ADMIN_EMAILS);
+const allowedEmails = splitEnvList(process.env.ALLOWED_EMAILS);
+const allowedDomains = splitEnvList(process.env.ALLOWED_EMAIL_DOMAINS);
+
+for (const email of [...adminEmails, ...allowedEmails]) {
+  if (!isEmail(email)) errors.push(`Invalid email configured: ${email}`);
+}
+
+if (adminEmails.length === 0) {
   errors.push("ADMIN_EMAILS must contain at least one admin email.");
 }
 
-if (splitEnvList(process.env.ALLOWED_EMAILS).length === 0 && splitEnvList(process.env.ALLOWED_EMAIL_DOMAINS).length === 0) {
+for (const adminEmail of adminEmails) {
+  if (!isEmailAllowedByConfig(adminEmail, allowedEmails, allowedDomains)) {
+    errors.push(`ADMIN_EMAILS contains ${adminEmail}, but this email is not allowed by ALLOWED_EMAILS/ALLOWED_EMAIL_DOMAINS.`);
+  }
+}
+
+if (allowedEmails.length === 0 && allowedDomains.length === 0) {
   warnings.push("ALLOWED_EMAILS and ALLOWED_EMAIL_DOMAINS are empty, so any verified Google account can sign in.");
+}
+
+if (!["memory", "redis", undefined].includes(process.env.RATE_LIMIT_DRIVER)) {
+  errors.push("RATE_LIMIT_DRIVER must be either memory or redis.");
 }
 
 if (process.env.RATE_LIMIT_DRIVER === "redis") {
@@ -76,8 +207,8 @@ if (!process.env.OPENROUTER_API_KEY) {
   warnings.push("OPENROUTER_API_KEY is empty. AI suggestions will use local fallback.");
 }
 
-if (!process.env.SERPAPI_KEY) {
-  warnings.push("SERPAPI_KEY is empty. Post-match result sync will be disabled.");
+if (!process.env.API_FOOTBALL_KEY) {
+  warnings.push("API_FOOTBALL_KEY is empty. Real-time match pages will use local fallback.");
 }
 
 for (const warning of warnings) {
