@@ -5,7 +5,7 @@ import { isAdminEmail } from "../../lib/access-control";
 import { MAX_GOALS } from "../../lib/prediction";
 import { prisma } from "../../lib/prisma";
 import { getMatchVenue } from "../../lib/venues";
-import { saveExternalFixtureId, saveMatchResult, saveMatchStatus } from "./actions";
+import { saveMatchEvent, saveMatchLiveUrl, saveMatchResult, saveMatchStatus } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +24,7 @@ const timeFormatter = new Intl.DateTimeFormat("pt-BR", {
 
 function formatMatchDate(startsAt: Date | null) {
   if (!startsAt) return "Sem data";
-  return `${dateFormatter.format(startsAt)} às ${timeFormatter.format(startsAt)}`;
+  return `${dateFormatter.format(startsAt)} as ${timeFormatter.format(startsAt)}`;
 }
 
 function formatMatchStatus(status: string, hasResult: boolean) {
@@ -41,7 +41,7 @@ export default async function AdminPage() {
   }
 
   const matches = await prisma.match.findMany({
-    include: { _count: { select: { predictions: true } } },
+    include: { _count: { select: { events: true, predictions: true } } },
     orderBy: [{ startsAt: "asc" }, { group: "asc" }],
   });
 
@@ -51,9 +51,9 @@ export default async function AdminPage() {
     <main className="container bolaoPage">
       <CupHeader
         active="admin"
-        eyebrow="Área protegida"
-        title="Admin do bolão"
-        description="Lance resultados oficiais e recalcule automaticamente a pontuação dos palpites."
+        eyebrow="Area protegida"
+        title="Admin do bolao"
+        description="Lance resultados oficiais, altere status e cadastre lances do tempo real."
       />
 
       <section className="pageToolbar">
@@ -78,11 +78,11 @@ export default async function AdminPage() {
                 <div>
                   <span className="badge">Grupo {match.group}</span>
                   <h2>{match.teamA} x {match.teamB}</h2>
-                  <p className="muted">{formatMatchDate(match.startsAt)} · {getMatchVenue(match.group, match.teamA, match.teamB)}</p>
+                  <p className="muted">{formatMatchDate(match.startsAt)} - {getMatchVenue(match.group, match.teamA, match.teamB)}</p>
                 </div>
                 <div className="adminResultStatus">
                   <strong>{hasResult ? `${match.resultGoalsA} x ${match.resultGoalsB}` : "Pendente"}</strong>
-                  <span>{matchStatus} Â· {match._count.predictions} palpite(s)</span>
+                  <span>{matchStatus} - {match._count.predictions} palpite(s) - {match._count.events} lance(s)</span>
                 </div>
               </div>
 
@@ -100,20 +100,36 @@ export default async function AdminPage() {
                 </form>
               )}
 
-              <form action={saveExternalFixtureId} className="adminStatusForm">
+              <form action={saveMatchLiveUrl} className="adminStatusForm">
                 <input name="matchId" type="hidden" value={match.id} />
                 <label>
-                  <span>Fixture ID da API-Football</span>
+                  <span>URL externa do tempo real</span>
                   <input
-                    aria-label={`Fixture externo de ${match.teamA} x ${match.teamB}`}
-                    defaultValue={match.externalFixtureId ?? ""}
-                    min="1"
-                    name="externalFixtureId"
-                    placeholder="Ex.: 1234567"
-                    type="number"
+                    aria-label={`URL externa do tempo real de ${match.teamA} x ${match.teamB}`}
+                    defaultValue={match.liveUrl ?? ""}
+                    name="liveUrl"
+                    placeholder="https://..."
+                    type="url"
                   />
                 </label>
-                <button className="buttonSecondary" type="submit">Salvar fixture</button>
+                <button className="buttonSecondary" type="submit">Salvar link</button>
+              </form>
+
+              <form action={saveMatchEvent} className="adminEventForm">
+                <input name="matchId" type="hidden" value={match.id} />
+                <label>
+                  <span>Minuto</span>
+                  <input aria-label={`Minuto do lance de ${match.teamA} x ${match.teamB}`} name="minute" placeholder="23' ou 45+2'" type="text" />
+                </label>
+                <label>
+                  <span>Titulo do lance</span>
+                  <input aria-label={`Titulo do lance de ${match.teamA} x ${match.teamB}`} name="title" placeholder="Gol, cartao, chance..." type="text" />
+                </label>
+                <label>
+                  <span>Descricao</span>
+                  <input aria-label={`Descricao do lance de ${match.teamA} x ${match.teamB}`} name="description" placeholder="Descreva rapidamente o que aconteceu" type="text" />
+                </label>
+                <button className="buttonSecondary" type="submit">Adicionar lance</button>
               </form>
 
               <form action={saveMatchResult} className="adminResultForm">

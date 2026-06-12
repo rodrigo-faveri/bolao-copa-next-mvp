@@ -76,8 +76,8 @@ if (!process.env.OPENROUTER_API_KEY) {
   warnings.push("OPENROUTER_API_KEY is empty. AI suggestions will use local fallback.");
 }
 
-if (process.env.SPORTS_API_PROVIDER === "api-football" && !process.env.API_FOOTBALL_KEY) {
-  warnings.push("API_FOOTBALL_KEY is empty. Real-time match pages will use local fallback.");
+if (!process.env.SERPAPI_KEY) {
+  warnings.push("SERPAPI_KEY is empty. Post-match result sync will be disabled.");
 }
 
 for (const warning of warnings) {

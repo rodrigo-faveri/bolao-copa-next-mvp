@@ -1,20 +1,21 @@
 import Link from "next/link";
 import { AuthButton } from "./AuthButton";
 
-type ActivePage = "home" | "bolao" | "boloes" | "simulador" | "ranking" | "noticias" | "admin" | "perfil";
+type ActivePage = "home" | "bolao" | "boloes" | "simulador" | "ranking" | "resultados" | "noticias" | "admin" | "perfil";
 
 const navItems = [
-  { href: "/", label: "Início", key: "home" },
+  { href: "/", label: "Inicio", key: "home" },
   { href: "/bolao", label: "Palpites", key: "bolao" },
-  { href: "/boloes", label: "Bolões", key: "boloes" },
+  { href: "/boloes", label: "Boloes", key: "boloes" },
   { href: "/simulador", label: "Simulador", key: "simulador" },
   { href: "/ranking", label: "Ranking", key: "ranking" },
-  { href: "/noticias", label: "Notícias", key: "noticias" },
+  { href: "/resultados", label: "Resultados", key: "resultados" },
+  { href: "/noticias", label: "Noticias", key: "noticias" },
 ] as const;
 
 export function CupHeader({
   active,
-  eyebrow = "Bolão Copa 2026",
+  eyebrow = "Bolao Copa 2026",
   title,
   description,
 }: {
@@ -30,7 +31,7 @@ export function CupHeader({
         <span className="eyebrow">{eyebrow}</span>
         <h1>{title}</h1>
         <p>{description}</p>
-        <div className="pillNav" aria-label="Navegação principal">
+        <div className="pillNav" aria-label="Navegacao principal">
           {navItems.map((item) => (
             <Link
               className={`pillLink ${active === item.key ? "pillLinkActive" : ""}`}

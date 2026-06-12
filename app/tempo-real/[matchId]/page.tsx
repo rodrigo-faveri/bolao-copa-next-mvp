@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { CupHeader } from "../../../components/CupHeader";
 import { getTeamFlagUrl } from "../../../lib/teams";
 import { prisma } from "../../../lib/prisma";
-import { getApiFootballLiveMatch } from "../../../lib/sports-api";
 import { getMatchVenue } from "../../../lib/venues";
 
 export const dynamic = "force-dynamic";
@@ -24,10 +23,19 @@ function flagFor(team: string) {
   return <img className="teamFlag" src={flagUrl} alt={`Bandeira de ${team}`} loading="lazy" />;
 }
 
-function formatStatus(status: string, hasResult: boolean) {
-  if (hasResult || status === "finished") return "Encerrada";
-  if (status === "live") return "Ao vivo";
-  return "Agendada";
+function getAutomaticStatus(match: { startsAt: Date | null; status: string; resultGoalsA: number | null; resultGoalsB: number | null }, now = new Date()) {
+  const hasResult = match.resultGoalsA !== null && match.resultGoalsB !== null;
+  if (hasResult || match.status === "finished") return "Encerrada";
+  if (match.status === "live") return "Ao vivo";
+  if (!match.startsAt) return "Agendada";
+
+  const elapsedMinutes = Math.floor((now.getTime() - match.startsAt.getTime()) / 60000);
+  if (elapsedMinutes < 0) return "Agendada";
+  if (elapsedMinutes <= 45) return "1o tempo";
+  if (elapsedMinutes <= 60) return "Intervalo previsto";
+  if (elapsedMinutes <= 105) return "2o tempo";
+  if (elapsedMinutes <= 130) return "Acréscimos/encerramento previsto";
+  return "Aguardando resultado";
 }
 
 function buildTimeline(match: {
@@ -40,6 +48,8 @@ function buildTimeline(match: {
 }) {
   const hasResult = match.resultGoalsA !== null && match.resultGoalsB !== null;
   const events: Array<{ minute: string; title: string; description: string }> = [];
+  const now = new Date();
+  const elapsedMinutes = match.startsAt ? Math.floor((now.getTime() - match.startsAt.getTime()) / 60000) : null;
 
   if (hasResult) {
     events.push({
@@ -49,11 +59,35 @@ function buildTimeline(match: {
     });
   }
 
+  if (elapsedMinutes !== null && elapsedMinutes >= 105 && !hasResult) {
+    events.push({
+      minute: "90'",
+      title: "Fim previsto",
+      description: "Tempo regulamentar estimado encerrado. Aguardando confirmacao do resultado oficial.",
+    });
+  }
+
+  if (elapsedMinutes !== null && elapsedMinutes >= 60) {
+    events.push({
+      minute: "46'",
+      title: "Segundo tempo previsto",
+      description: "A partida entrou na janela estimada do segundo tempo.",
+    });
+  }
+
+  if (elapsedMinutes !== null && elapsedMinutes >= 45) {
+    events.push({
+      minute: "45'",
+      title: "Intervalo previsto",
+      description: "A partida entrou na janela estimada de intervalo.",
+    });
+  }
+
   if (match.status === "live") {
     events.push({
       minute: "AGORA",
       title: "Partida em andamento",
-      description: "A linha do tempo esta pronta para receber lances em tempo real por API ou pelo admin.",
+      description: "Status marcado como ao vivo no admin.",
     });
   }
 
@@ -70,18 +104,24 @@ function buildTimeline(match: {
 
 export default async function RealTimePage({ params }: { params: Promise<{ matchId: string }> }) {
   const { matchId } = await params;
-  const match = await prisma.match.findUnique({ where: { id: matchId } });
+  const match = await prisma.match.findUnique({
+    where: { id: matchId },
+    include: { events: { orderBy: { createdAt: "desc" } } },
+  });
 
   if (!match) notFound();
 
   const hasResult = match.resultGoalsA !== null && match.resultGoalsB !== null;
   const venue = getMatchVenue(match.group, match.teamA, match.teamB);
-  const liveData = await getApiFootballLiveMatch(match.externalFixtureId);
-  const timeline = liveData.events.length > 0 ? liveData.events : buildTimeline(match);
-  const displayGoalsA = liveData.available ? liveData.goalsA : match.resultGoalsA;
-  const displayGoalsB = liveData.available ? liveData.goalsB : match.resultGoalsB;
-  const hasDisplayScore = displayGoalsA !== null && displayGoalsB !== null && displayGoalsA !== undefined && displayGoalsB !== undefined;
-  const statusLabel = liveData.statusLabel ?? formatStatus(match.status, hasResult);
+  const manualEvents = match.events.map((event) => ({
+    minute: event.minute,
+    title: event.title,
+    description: event.description,
+  }));
+  const timeline = manualEvents.length > 0 ? manualEvents : buildTimeline(match);
+  const hasDisplayScore = hasResult;
+  const statusLabel = getAutomaticStatus(match);
+  const isLiveLike = ["Ao vivo", "1o tempo", "Intervalo previsto", "2o tempo", "Acréscimos/encerramento previsto"].includes(statusLabel);
 
   return (
     <main className="container bolaoPage">
@@ -99,8 +139,8 @@ export default async function RealTimePage({ params }: { params: Promise<{ match
             <strong>{match.teamA}</strong>
           </div>
           <div className="realTimeScore">
-            <span className={match.status === "live" || liveData.statusShort === "1H" || liveData.statusShort === "2H" ? "badge badgeLive" : "badge"}>{statusLabel}</span>
-            <strong>{hasDisplayScore ? `${displayGoalsA} x ${displayGoalsB}` : "x"}</strong>
+            <span className={isLiveLike ? "badge badgeLive" : "badge"}>{statusLabel}</span>
+            <strong>{hasDisplayScore ? `${match.resultGoalsA} x ${match.resultGoalsB}` : "x"}</strong>
             <small>{match.startsAt ? dateFormatter.format(match.startsAt) : "Horario a definir"}</small>
           </div>
           <div className="realTimeTeam realTimeTeamRight">
@@ -112,7 +152,8 @@ export default async function RealTimePage({ params }: { params: Promise<{ match
         <div className="realTimeMeta">
           <span>Grupo {match.group}</span>
           <span>{venue}</span>
-          <span>{liveData.available ? "Dados: API-Football" : "Dados locais"}</span>
+          <span>{manualEvents.length} lance(s) cadastrado(s)</span>
+          {match.liveUrl && <a href={match.liveUrl} target="_blank" rel="noreferrer">Ver fonte externa</a>}
           <Link href="/bolao">Voltar para palpites</Link>
         </div>
       </section>
@@ -121,7 +162,7 @@ export default async function RealTimePage({ params }: { params: Promise<{ match
         <div className="realTimeTimelineHeader">
           <span className="badge badgeGold">Lances</span>
           <h2>Tempo real</h2>
-          <p>{liveData.available ? "Lances carregados da API-Football com cache para preservar o plano free." : liveData.message ?? "Sem fonte externa configurada para esta partida."}</p>
+          <p>{manualEvents.length > 0 ? "Lances cadastrados pelo admin do bolao." : "Linha do tempo automatica baseada no horario da partida. Para lances detalhados, use o link externo quando disponivel."}</p>
         </div>
 
         <div className="timelineList">
