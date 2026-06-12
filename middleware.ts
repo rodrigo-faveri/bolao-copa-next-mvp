@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const sessionCookieNames = ["authjs.session-token", "__Secure-authjs.session-token"];
-const protectedPathPrefixes = ["/bolao", "/boloes", "/ranking", "/admin", "/perfil"];
+const protectedPathPrefixes = ["/bolao", "/boloes", "/ranking", "/resultados", "/admin", "/perfil"];
 
 function shouldForceHttps(request: NextRequest) {
   if (process.env.NODE_ENV !== "production") return false;

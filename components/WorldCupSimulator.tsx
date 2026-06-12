@@ -116,7 +116,8 @@ function formatVenue(venue: string) {
   return venue.length > 16 ? `${venue.slice(0, 14)}...` : venue;
 }
 
-function formatCountdown(startsAt: Date | null, now: Date) {
+function formatCountdown(startsAt: Date | null, now: Date, hasOfficialResult = false) {
+  if (hasOfficialResult) return "Encerrado";
   if (!startsAt) return "Horário a definir";
 
   const remainingSeconds = Math.max(0, Math.floor((startsAt.getTime() - now.getTime()) / 1000));
@@ -574,8 +575,8 @@ export function WorldCupSimulator({
                           <span title={match.venue}>{formatVenue(match.venue)}</span>
                           <strong>{startsAt ? timeFormatter.format(startsAt) : "--:--"}</strong>
                           {isHydrated && (
-                            <span className={`matchCountdown ${startsAt && startsAt.getTime() <= now.getTime() ? "matchCountdownClosed" : ""}`}>
-                              {formatCountdown(startsAt, now)}
+                            <span className={`matchCountdown ${hasOfficialResult || (startsAt && startsAt.getTime() <= now.getTime()) ? "matchCountdownClosed" : ""}`}>
+                              {formatCountdown(startsAt, now, hasOfficialResult)}
                             </span>
                           )}
                         </div>

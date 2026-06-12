@@ -21,28 +21,31 @@ const MatchStatusSchema = z.object({
   status: z.enum(["scheduled", "live"]),
 });
 
-const ExternalFixtureSchema = z.object({
+const MatchEventSchema = z.object({
   matchId: z.string().cuid(),
-  externalFixtureId: z.preprocess(
+  minute: z.string().trim().min(1).max(12),
+  title: z.string().trim().min(2).max(80),
+  description: z.string().trim().min(2).max(280),
+});
+
+const MatchLiveUrlSchema = z.object({
+  matchId: z.string().cuid(),
+  liveUrl: z.preprocess(
     (value) => (typeof value === "string" && value.trim() === "" ? null : value),
-    z.coerce.number().int().positive().nullable(),
+    z.string().trim().url().max(500).nullable(),
   ),
 });
+
+function assertAdmin(email: string | null, action: string) {
+  if (isAdminEmail(email)) return;
+  logger.warn(`${action}_denied`, { emailDomain: email?.split("@")[1]?.toLowerCase() ?? null });
+  throw new Error("Voce nao tem permissao para executar esta acao.");
+}
 
 export async function saveMatchResult(formData: FormData) {
   const session = await auth();
   const adminEmail = session?.user?.email ?? null;
-
-  if (!isAdminEmail(adminEmail)) {
-    logger.warn("admin_result_denied", { emailDomain: adminEmail?.split("@")[1]?.toLowerCase() ?? null });
-    await createAuditLog(prisma, {
-      actorEmail: adminEmail,
-      action: "admin_result_denied",
-      entity: "match",
-      entityId: typeof formData.get("matchId") === "string" ? String(formData.get("matchId")) : null,
-    }).catch((error) => logger.error("audit_log_write_failed", { action: "admin_result_denied", message: error instanceof Error ? error.message : "unknown" }));
-    throw new Error("Você não tem permissão para lançar resultados.");
-  }
+  assertAdmin(adminEmail, "admin_result");
 
   const result = ResultSchema.safeParse({
     matchId: formData.get("matchId"),
@@ -50,7 +53,7 @@ export async function saveMatchResult(formData: FormData) {
     goalsB: formData.get("goalsB"),
   });
 
-  if (!result.success) throw new Error("Resultado inválido.");
+  if (!result.success) throw new Error("Resultado invalido.");
 
   await prisma.$transaction(async (transaction) => {
     const previousResult = await transaction.match.findUnique({
@@ -73,6 +76,7 @@ export async function saveMatchResult(formData: FormData) {
       },
     });
   });
+
   logger.info("admin_result_saved", {
     matchId: result.data.matchId,
     goalsA: result.data.goalsA,
@@ -88,32 +92,22 @@ export async function saveMatchResult(formData: FormData) {
 export async function saveMatchStatus(formData: FormData) {
   const session = await auth();
   const adminEmail = session?.user?.email ?? null;
-
-  if (!isAdminEmail(adminEmail)) {
-    logger.warn("admin_status_denied", { emailDomain: adminEmail?.split("@")[1]?.toLowerCase() ?? null });
-    await createAuditLog(prisma, {
-      actorEmail: adminEmail,
-      action: "admin_status_denied",
-      entity: "match",
-      entityId: typeof formData.get("matchId") === "string" ? String(formData.get("matchId")) : null,
-    }).catch((error) => logger.error("audit_log_write_failed", { action: "admin_status_denied", message: error instanceof Error ? error.message : "unknown" }));
-    throw new Error("VocÃª nÃ£o tem permissÃ£o para alterar o status da partida.");
-  }
+  assertAdmin(adminEmail, "admin_status");
 
   const result = MatchStatusSchema.safeParse({
     matchId: formData.get("matchId"),
     status: formData.get("status"),
   });
 
-  if (!result.success) throw new Error("Status invÃ¡lido.");
+  if (!result.success) throw new Error("Status invalido.");
 
   await prisma.$transaction(async (transaction) => {
     const previousMatch = await transaction.match.findUnique({
       where: { id: result.data.matchId },
-      select: { status: true, finishedAt: true, resultGoalsA: true, resultGoalsB: true },
+      select: { status: true, resultGoalsA: true, resultGoalsB: true },
     });
 
-    if (!previousMatch) throw new Error("Partida nÃ£o encontrada.");
+    if (!previousMatch) throw new Error("Partida nao encontrada.");
     if (previousMatch.resultGoalsA !== null && previousMatch.resultGoalsB !== null) {
       throw new Error("Partida com resultado oficial deve permanecer encerrada.");
     }
@@ -144,52 +138,106 @@ export async function saveMatchStatus(formData: FormData) {
   revalidatePath("/admin");
   revalidatePath("/bolao");
   revalidatePath("/simulador");
+  revalidatePath(`/tempo-real/${result.data.matchId}`);
 }
 
-export async function saveExternalFixtureId(formData: FormData) {
+export async function saveMatchEvent(formData: FormData) {
   const session = await auth();
   const adminEmail = session?.user?.email ?? null;
+  assertAdmin(adminEmail, "admin_match_event");
 
-  if (!isAdminEmail(adminEmail)) {
-    logger.warn("admin_fixture_mapping_denied", { emailDomain: adminEmail?.split("@")[1]?.toLowerCase() ?? null });
-    throw new Error("VocÃª nÃ£o tem permissÃ£o para mapear fixtures.");
-  }
-
-  const result = ExternalFixtureSchema.safeParse({
+  const result = MatchEventSchema.safeParse({
     matchId: formData.get("matchId"),
-    externalFixtureId: formData.get("externalFixtureId"),
+    minute: formData.get("minute"),
+    title: formData.get("title"),
+    description: formData.get("description"),
   });
 
-  if (!result.success) throw new Error("Fixture externo invÃ¡lido.");
+  if (!result.success) throw new Error("Lance invalido.");
+
+  let eventId = "";
 
   await prisma.$transaction(async (transaction) => {
-    const previousMatch = await transaction.match.findUnique({
+    const match = await transaction.match.findUnique({
       where: { id: result.data.matchId },
-      select: { externalFixtureId: true },
+      select: { id: true },
     });
 
-    if (!previousMatch) throw new Error("Partida nÃ£o encontrada.");
+    if (!match) throw new Error("Partida nao encontrada.");
 
-    await transaction.match.update({
-      where: { id: result.data.matchId },
-      data: { externalFixtureId: result.data.externalFixtureId },
+    const event = await transaction.matchEvent.create({
+      data: {
+        matchId: result.data.matchId,
+        minute: result.data.minute,
+        title: result.data.title,
+        description: result.data.description,
+      },
     });
+    eventId = event.id;
 
     await createAuditLog(transaction, {
       actorEmail: adminEmail,
-      action: "admin_external_fixture_saved",
-      entity: "match",
-      entityId: result.data.matchId,
+      action: "admin_match_event_saved",
+      entity: "match_event",
+      entityId: event.id,
       metadata: {
-        previousExternalFixtureId: previousMatch.externalFixtureId,
-        externalFixtureId: result.data.externalFixtureId,
+        matchId: result.data.matchId,
+        minute: result.data.minute,
+        title: result.data.title,
       },
     });
   });
 
-  logger.info("admin_external_fixture_saved", {
+  logger.info("admin_match_event_saved", {
     matchId: result.data.matchId,
-    externalFixtureId: result.data.externalFixtureId,
+    eventId,
+    minute: result.data.minute,
+  });
+
+  revalidatePath("/admin");
+  revalidatePath(`/tempo-real/${result.data.matchId}`);
+}
+
+export async function saveMatchLiveUrl(formData: FormData) {
+  const session = await auth();
+  const adminEmail = session?.user?.email ?? null;
+  assertAdmin(adminEmail, "admin_match_live_url");
+
+  const result = MatchLiveUrlSchema.safeParse({
+    matchId: formData.get("matchId"),
+    liveUrl: formData.get("liveUrl"),
+  });
+
+  if (!result.success) throw new Error("URL de tempo real invalida.");
+
+  await prisma.$transaction(async (transaction) => {
+    const previousMatch = await transaction.match.findUnique({
+      where: { id: result.data.matchId },
+      select: { liveUrl: true },
+    });
+
+    if (!previousMatch) throw new Error("Partida nao encontrada.");
+
+    await transaction.match.update({
+      where: { id: result.data.matchId },
+      data: { liveUrl: result.data.liveUrl },
+    });
+
+    await createAuditLog(transaction, {
+      actorEmail: adminEmail,
+      action: "admin_match_live_url_saved",
+      entity: "match",
+      entityId: result.data.matchId,
+      metadata: {
+        previousLiveUrl: previousMatch.liveUrl,
+        liveUrl: result.data.liveUrl,
+      },
+    });
+  });
+
+  logger.info("admin_match_live_url_saved", {
+    matchId: result.data.matchId,
+    hasLiveUrl: Boolean(result.data.liveUrl),
   });
 
   revalidatePath("/admin");

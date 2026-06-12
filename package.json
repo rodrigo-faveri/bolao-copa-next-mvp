@@ -15,7 +15,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
     "result:set": "tsx scripts/set-result.ts",
-    "result:import": "tsx scripts/import-results.ts"
+    "result:import": "tsx scripts/import-results.ts",
+    "result:sync-serpapi": "tsx scripts/sync-serpapi-results.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "2.11.1",

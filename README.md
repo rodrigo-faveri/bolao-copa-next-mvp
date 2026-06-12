@@ -10,7 +10,6 @@ App recreativo para palpites da Copa do Mundo de 2026 entre amigos, sem dinheiro
 - Prisma + PostgreSQL
 - Zod para validacao
 - OpenRouter opcional para sugestoes de IA
-- API-Football opcional para placar/lances em tempo real
 
 ## Recursos
 
@@ -25,8 +24,11 @@ App recreativo para palpites da Copa do Mundo de 2026 entre amigos, sem dinheiro
 - Badge clicavel de partida ao vivo dentro do proprio confronto.
 - Pagina de tempo real por partida com placar, status e linha do tempo.
 - Controle administrativo de status da partida: agendada ou ao vivo.
+- Tempo real automatico por horario, com link externo opcional.
+- Cadastro manual opcional de lances pelo admin.
 - Alertas no bolao para palpites pendentes perto do fechamento.
 - Resultado oficial exibido separadamente do palpite do usuario.
+- Pagina de resultados com jogos em acompanhamento, placar oficial, resumo automatico e motivo da pontuacao.
 - Pontuacao automatica: 5 pontos para placar exato e 3 para resultado correto.
 - Ranking com detalhes de acertos, sem expor e-mails.
 - Perfil publico com apelido e avatar por cor.
@@ -52,6 +54,7 @@ App recreativo para palpites da Copa do Mundo de 2026 entre amigos, sem dinheiro
 - `/boloes/[inviteCode]`: detalhes do bolao, membros, convite e configuracoes do dono.
 - `/simulador`: simulador de grupos e mata-mata.
 - `/ranking`: ranking geral ou ranking privado com `?bolao=CODIGO`.
+- `/resultados`: acompanhamento de jogos iniciados e comparacao dos palpites do usuario com placares oficiais.
 - `/perfil`: perfil publico, apelido, avatar e historico por rodada.
 - `/noticias`: noticias recentes com filtros por fonte, data e busca.
 - `/admin`: registro de resultados oficiais, restrito a admins.
@@ -103,10 +106,9 @@ ADMIN_EMAILS=""
 OPENROUTER_API_KEY=""
 OPENROUTER_MODEL="nex-agi/nex-n2-pro:free"
 
-SPORTS_API_PROVIDER="api-football"
-API_FOOTBALL_KEY=""
-API_FOOTBALL_BASE_URL="https://v3.football.api-sports.io"
-SPORTS_API_CACHE_SECONDS="60"
+SERPAPI_KEY=""
+SERPAPI_RESULT_DELAY_MINUTES="130"
+SERPAPI_RESULT_MAX_MATCHES="4"
 ```
 
 Notas:
@@ -119,8 +121,9 @@ Notas:
 - `ALLOWED_EMAILS` e `ALLOWED_EMAIL_DOMAINS` restringem quem pode entrar.
 - `ADMIN_EMAILS` define quem pode acessar `/admin`.
 - `OPENROUTER_API_KEY` e opcional. Sem chave, o app usa sugestao local.
-- `API_FOOTBALL_KEY` e opcional. Sem chave, a pagina de tempo real usa dados locais.
-- `SPORTS_API_CACHE_SECONDS` controla o cache das chamadas esportivas. O padrao de 60 segundos ajuda a preservar o plano free.
+- `SERPAPI_KEY` e opcional. Sem chave, a sincronizacao semi-automatica de resultados fica desativada.
+- `SERPAPI_RESULT_DELAY_MINUTES` define quantos minutos apos o inicio o sync pode tentar buscar o resultado. Padrao: 130.
+- `SERPAPI_RESULT_MAX_MATCHES` limita quantas partidas sem resultado sao consultadas por execucao, preservando a cota.
 
 ## Google OAuth
 
@@ -164,6 +167,22 @@ Tambem e possivel importar resultados em lote por CSV:
 npm run result:import -- data/results.csv
 ```
 
+Tambem existe sincronizacao semi-automatica pos-jogo usando SerpAPI/Google Sports:
+
+```bash
+npm run result:sync-serpapi
+```
+
+Ela procura partidas que ja passaram da janela configurada por `SERPAPI_RESULT_DELAY_MINUTES`, ainda nao tem resultado oficial e tenta importar o placar final. Se a resposta nao for confiavel ou nao estiver finalizada, a partida e ignorada.
+
+Para testar sem salvar no banco:
+
+```bash
+SERPAPI_DRY_RUN=true npm run result:sync-serpapi
+```
+
+Em producao, agende esse comando em cron/job a cada 10 ou 15 minutos. Com `SERPAPI_RESULT_MAX_MATCHES="4"`, ele evita gastar muitas consultas por execucao.
+
 Use `data/results.example.csv` como modelo. O CSV aceita `match_id` ou a combinacao `group`, `team_a`, `team_b`.
 
 Ao registrar o resultado:
@@ -183,18 +202,17 @@ A regra atual usa o status administrativo e a agenda cadastrada no banco:
 - ela permanece com o badge por uma janela estimada de 130 minutos;
 - quando o resultado oficial e registrado, ela vira `Encerrada` e deixa de aparecer como ao vivo.
 
-A pagina de tempo real tenta carregar placar, status e eventos pela API-Football quando a partida tem `Fixture ID` configurado no admin e `API_FOOTBALL_KEY` esta preenchida.
+A pagina de tempo real usa uma linha do tempo automatica baseada no horario da partida. Esse caminho evita depender de APIs pagas ou com cobertura limitada.
 
-Fluxo:
+Fluxo hibrido:
 
-1. Crie uma conta em `api-football.com`.
-2. Preencha `API_FOOTBALL_KEY` no `.env`.
-3. No painel `/admin`, salve o `Fixture ID da API-Football` em cada partida.
-4. Acesse `/tempo-real/[matchId]`.
+1. A partida aparece como `Ao vivo` automaticamente pela janela de horario ou manualmente pelo admin.
+2. A linha do tempo mostra marcos estimados: inicio, intervalo, segundo tempo e fim previsto.
+3. O badge `Ao vivo` no confronto abre `/tempo-real/[matchId]`.
+4. Opcionalmente, o admin pode cadastrar lances especificos ou uma URL externa de tempo real.
+5. Ao registrar o resultado oficial, a partida vira `Encerrada`.
 
-O app tambem expoe o endpoint interno `/api/live/match/[matchId]`, sempre server-side, para evitar expor a chave no navegador.
-
-Se a API nao estiver configurada, se o fixture nao existir ou se a cota acabar, a pagina usa fallback local baseado no status administrativo.
+No futuro, se aparecer uma API realmente gratuita e com cobertura da Copa, a estrutura de `MatchEvent` permite importar eventos automaticamente sem mudar a tela.
 
 ## Assistente de IA
 
@@ -221,7 +239,7 @@ Medidas atuais:
 
 - Redirecionamento HTTP para HTTPS em producao via middleware.
 - Auth.js com sessao no banco.
-- Middleware protegendo `/bolao`, `/boloes`, `/ranking`, `/perfil` e `/admin`.
+- Middleware protegendo `/bolao`, `/boloes`, `/ranking`, `/resultados`, `/perfil` e `/admin`.
 - Checagem server-side de usuario e admin.
 - Allowlist opcional de e-mails/dominios.
 - Validacao com Zod em server actions e APIs.
@@ -231,7 +249,6 @@ Medidas atuais:
 - Headers como `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, `CSP` e `nosniff`.
 - HSTS em producao.
 - Chaves de IA ficam apenas no servidor.
-- Chaves de API esportiva ficam apenas no servidor.
 - Logs estruturados em JSON para login bloqueado, admin e IA.
 - Tabela `AuditLog` para eventos de negocio e seguranca: palpite salvo, resultado admin salvo e tentativa admin negada.
 - Auditoria tambem registra atualizacao de perfil.
@@ -258,6 +275,7 @@ npm run prisma:deploy
 npm run prisma:seed
 npm run result:set -- <matchId> <golsA> <golsB>
 npm run result:import -- data/results.csv
+npm run result:sync-serpapi
 ```
 
 ## Verificacoes

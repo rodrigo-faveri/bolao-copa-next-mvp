@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { NewsItem } from "../lib/news";
 
 type DateFilter = "all" | "today" | "7d" | "30d";
+type ViewMode = "cards" | "list";
 
 const newsDateFormatter = new Intl.DateTimeFormat("pt-BR", {
   day: "2-digit",
@@ -35,8 +36,21 @@ export function NewsFilters({ news }: { news: NewsItem[] }) {
   const [source, setSource] = useState("all");
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
   const [query, setQuery] = useState("");
+  const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const sources = useMemo(() => Array.from(new Set(news.map((item) => item.source))).sort(), [news]);
   const normalizedQuery = query.trim().toLowerCase();
+
+  useEffect(() => {
+    const storedViewMode = window.localStorage.getItem("newsViewMode");
+    if (storedViewMode === "cards" || storedViewMode === "list") {
+      setViewMode(storedViewMode);
+    }
+  }, []);
+
+  function changeViewMode(nextViewMode: ViewMode) {
+    setViewMode(nextViewMode);
+    window.localStorage.setItem("newsViewMode", nextViewMode);
+  }
 
   const filteredNews = useMemo(() => {
     return news.filter((item) => {
@@ -86,16 +100,27 @@ export function NewsFilters({ news }: { news: NewsItem[] }) {
         </button>
       </section>
 
-      <div className="newsResultCount">
-        <strong>{filteredNews.length}</strong> notícia(s) encontrada(s)
+      <div className="newsResultBar">
+        <div className="newsResultCount">
+          <strong>{filteredNews.length}</strong> notícia(s) encontrada(s)
+        </div>
+
+        <div className="newsViewToggle" aria-label="Formato de visualização">
+          <button aria-pressed={viewMode === "cards"} onClick={() => changeViewMode("cards")} type="button">
+            Cards
+          </button>
+          <button aria-pressed={viewMode === "list"} onClick={() => changeViewMode("list")} type="button">
+            Lista
+          </button>
+        </div>
       </div>
 
       {filteredNews.length === 0 ? (
         <div className="notice">Nenhuma notícia encontrada com esses filtros.</div>
       ) : (
-        <section className="newsGrid">
+        <section className={viewMode === "cards" ? "newsGrid" : "newsList"}>
           {filteredNews.map((item) => (
-            <article className="newsCard" key={`${item.source}-${item.link}`}>
+            <article className={viewMode === "cards" ? "newsCard" : "newsCard newsCardList"} key={`${item.source}-${item.link}`}>
               <div className="newsMeta">
                 <span className="badge">{item.source}</span>
                 <span>{formatNewsDate(item.publishedAt)}</span>
