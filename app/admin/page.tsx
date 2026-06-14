@@ -84,6 +84,7 @@ function formatAuditAction(action: string, metadata: unknown, locale: AppLocale)
   if (action === "pool_created") return formatMessage(copy.admin.auditPoolCreated, { name: String(details.name ?? copy.admin.withoutName) });
   if (action === "pool_joined") return copy.admin.auditPoolJoined;
   if (action === "pool_renamed") return formatMessage(copy.admin.auditPoolRenamed, { name: String(details.name ?? copy.admin.withoutName) });
+  if (action === "pool_rules_updated") return copy.admin.auditPoolRulesUpdated;
   if (action === "pool_invite_regenerated") return copy.admin.auditInviteRegenerated;
   if (action === "pool_member_removed") return copy.admin.auditMemberRemoved;
   if (action.endsWith("_denied")) return copy.admin.auditDenied;

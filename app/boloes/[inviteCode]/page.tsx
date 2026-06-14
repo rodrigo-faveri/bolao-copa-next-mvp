@@ -5,7 +5,7 @@ import { CupHeader } from "../../../components/CupHeader";
 import { getCurrentLocale } from "../../../lib/i18n";
 import { formatMessage, t } from "../../../lib/i18n-shared";
 import { prisma } from "../../../lib/prisma";
-import { regeneratePoolInvite, removePoolMember, renamePool } from "../actions";
+import { regeneratePoolInvite, removePoolMember, renamePool, updatePoolRules } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +16,12 @@ function getInviteUrl(inviteCode: string) {
 
 function displayName(user: { id: string; name: string | null; nickname: string | null; email: string | null }, fallback: string) {
   return user.nickname?.trim() || user.name?.trim() || user.email || `${fallback} ${user.id.slice(-6)}`;
+}
+
+function getPoolModeLabel(mode: string, copy: ReturnType<typeof t>) {
+  if (mode === "family") return copy.pools.mode_family;
+  if (mode === "competitive") return copy.pools.mode_competitive;
+  return copy.pools.mode_friends;
 }
 
 export default async function PoolDetailsPage({ params }: { params: Promise<{ inviteCode: string }> }) {
@@ -58,6 +64,11 @@ export default async function PoolDetailsPage({ params }: { params: Promise<{ in
           <div className="poolInviteBox">
             <span>{copy.pools.code}</span>
             <strong>{pool.inviteCode}</strong>
+            <p className="poolRulesSummary">
+              <span>{getPoolModeLabel(pool.mode, copy)}</span>
+              <span>{formatMessage(copy.pools.exactRule, { points: pool.exactScorePoints })}</span>
+              <span>{formatMessage(copy.pools.outcomeRule, { points: pool.outcomePoints })}</span>
+            </p>
             <input readOnly value={inviteUrl} aria-label={formatMessage(copy.pools.inviteAria, { pool: pool.name })} />
             <Link className="buttonLink" href={`/bolao?bolao=${pool.inviteCode}`}>{copy.pools.pickInPool}</Link>
             <Link className="buttonLink" href={`/ranking?bolao=${pool.inviteCode}`}>{copy.pools.openPrivateRanking}</Link>
@@ -79,6 +90,26 @@ export default async function PoolDetailsPage({ params }: { params: Promise<{ in
             <form action={regeneratePoolInvite} className="poolForm">
               <input name="poolId" type="hidden" value={pool.id} />
               <button className="buttonSecondary" type="submit">{copy.pools.regenerateInvite}</button>
+            </form>
+            <form action={updatePoolRules} className="poolForm poolRulesForm">
+              <input name="poolId" type="hidden" value={pool.id} />
+              <label>
+                <span>{copy.pools.mode}</span>
+                <select defaultValue={pool.mode} name="mode">
+                  <option value="friends">{copy.pools.mode_friends}</option>
+                  <option value="family">{copy.pools.mode_family}</option>
+                  <option value="competitive">{copy.pools.mode_competitive}</option>
+                </select>
+              </label>
+              <label>
+                <span>{copy.pools.exactScorePoints}</span>
+                <input defaultValue={pool.exactScorePoints} max={20} min={1} name="exactScorePoints" required type="number" />
+              </label>
+              <label>
+                <span>{copy.pools.outcomePoints}</span>
+                <input defaultValue={pool.outcomePoints} max={20} min={0} name="outcomePoints" required type="number" />
+              </label>
+              <button type="submit">{copy.pools.saveRules}</button>
             </form>
           </article>
         )}

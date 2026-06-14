@@ -149,6 +149,9 @@ model Pool {
   id          String       @id @default(cuid())
   name        String
   inviteCode  String       @unique
+  exactScorePoints Int      @default(5)
+  outcomePoints    Int      @default(3)
+  mode        String       @default("friends")
   createdById String?
   createdBy   User?        @relation("PoolCreator", fields: [createdById], references: [id], onDelete: SetNull)
   members     PoolMember[]
