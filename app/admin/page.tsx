@@ -2,8 +2,10 @@ import { redirect } from "next/navigation";
 import { auth } from "../../auth";
 import { CupHeader } from "../../components/CupHeader";
 import { isAdminEmail } from "../../lib/access-control";
+import { getCurrentLocale } from "../../lib/i18n";
 import { MAX_GOALS } from "../../lib/prediction";
 import { prisma } from "../../lib/prisma";
+import { getTeamDisplayName } from "../../lib/teams";
 import { getMatchVenue } from "../../lib/venues";
 import { saveMatchEvent, saveMatchLiveUrl, saveMatchResult, saveMatchStatus } from "./actions";
 
@@ -86,6 +88,7 @@ export default async function AdminPage() {
   if (!isAdminEmail(session?.user?.email)) {
     redirect("/");
   }
+  const locale = await getCurrentLocale();
 
   const matches = await prisma.match.findMany({
     include: { _count: { select: { events: true, predictions: true } } },
@@ -148,13 +151,15 @@ export default async function AdminPage() {
         {matches.map((match) => {
           const hasResult = match.resultGoalsA !== null && match.resultGoalsB !== null;
           const matchStatus = formatMatchStatus(match.status, hasResult);
+          const teamALabel = getTeamDisplayName(match.teamA, locale);
+          const teamBLabel = getTeamDisplayName(match.teamB, locale);
 
           return (
             <article className="adminResultCard" key={match.id}>
               <div className="adminResultHeader">
                 <div>
                   <span className="badge">Grupo {match.group}</span>
-                  <h2>{match.teamA} x {match.teamB}</h2>
+                  <h2>{teamALabel} x {teamBLabel}</h2>
                   <p className="muted">{formatMatchDate(match.startsAt)} - {getMatchVenue(match.group, match.teamA, match.teamB)}</p>
                 </div>
                 <div className="adminResultStatus">
@@ -182,7 +187,7 @@ export default async function AdminPage() {
                 <label>
                   <span>URL externa do tempo real</span>
                   <input
-                    aria-label={`URL externa do tempo real de ${match.teamA} x ${match.teamB}`}
+                    aria-label={`URL externa do tempo real de ${teamALabel} x ${teamBLabel}`}
                     defaultValue={match.liveUrl ?? ""}
                     name="liveUrl"
                     placeholder="https://..."
@@ -196,15 +201,15 @@ export default async function AdminPage() {
                 <input name="matchId" type="hidden" value={match.id} />
                 <label>
                   <span>Minuto</span>
-                  <input aria-label={`Minuto do lance de ${match.teamA} x ${match.teamB}`} name="minute" placeholder="23' ou 45+2'" type="text" />
+                  <input aria-label={`Minuto do lance de ${teamALabel} x ${teamBLabel}`} name="minute" placeholder="23' ou 45+2'" type="text" />
                 </label>
                 <label>
                   <span>Titulo do lance</span>
-                  <input aria-label={`Titulo do lance de ${match.teamA} x ${match.teamB}`} name="title" placeholder="Gol, cartao, chance..." type="text" />
+                  <input aria-label={`Titulo do lance de ${teamALabel} x ${teamBLabel}`} name="title" placeholder="Gol, cartao, chance..." type="text" />
                 </label>
                 <label>
                   <span>Descricao</span>
-                  <input aria-label={`Descricao do lance de ${match.teamA} x ${match.teamB}`} name="description" placeholder="Descreva rapidamente o que aconteceu" type="text" />
+                  <input aria-label={`Descricao do lance de ${teamALabel} x ${teamBLabel}`} name="description" placeholder="Descreva rapidamente o que aconteceu" type="text" />
                 </label>
                 <button className="buttonSecondary" type="submit">Adicionar lance</button>
               </form>
@@ -212,9 +217,9 @@ export default async function AdminPage() {
               <form action={saveMatchResult} className="adminResultForm">
                 <input name="matchId" type="hidden" value={match.id} />
                 <label>
-                  <span>{match.teamA}</span>
+                  <span>{teamALabel}</span>
                   <input
-                    aria-label={`Gols de ${match.teamA}`}
+                    aria-label={`Gols de ${teamALabel}`}
                     defaultValue={match.resultGoalsA ?? ""}
                     max={MAX_GOALS}
                     min="0"
@@ -225,9 +230,9 @@ export default async function AdminPage() {
                 </label>
                 <span className="versus">x</span>
                 <label>
-                  <span>{match.teamB}</span>
+                  <span>{teamBLabel}</span>
                   <input
-                    aria-label={`Gols de ${match.teamB}`}
+                    aria-label={`Gols de ${teamBLabel}`}
                     defaultValue={match.resultGoalsB ?? ""}
                     max={MAX_GOALS}
                     min="0"

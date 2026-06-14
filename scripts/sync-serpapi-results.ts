@@ -22,7 +22,7 @@ async function main() {
   }
 
   const delayMinutes = readPositiveInt("SERPAPI_RESULT_DELAY_MINUTES", 130);
-  const maxMatches = readPositiveInt("SERPAPI_RESULT_MAX_MATCHES", 4);
+  const maxMatches = readPositiveInt("SERPAPI_RESULT_MAX_MATCHES", 12);
   const dryRun = hasFlag("--dry-run") || process.env.SERPAPI_DRY_RUN === "true";
   const debug = process.env.SERPAPI_DEBUG === "true";
   const cutoff = new Date(Date.now() - delayMinutes * 60 * 1000);

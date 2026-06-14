@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { AppLocale } from "../lib/i18n-shared";
 import { MAX_GOALS } from "../lib/prediction";
-import { getTeamFlagUrl } from "../lib/teams";
+import { getTeamDisplayName, getTeamFlagUrl } from "../lib/teams";
 
 type SimulatorMatch = {
   id: string;
@@ -111,7 +112,11 @@ function flagFor(team: string) {
   const flagUrl = getTeamFlagUrl(team);
   if (!flagUrl) return <span className="teamFlagPlaceholder" aria-hidden="true" />;
   // eslint-disable-next-line @next/next/no-img-element
-  return <img className="teamFlag" src={flagUrl} alt={`Bandeira de ${team}`} loading="lazy" />;
+  return <img className="teamFlag" src={flagUrl} alt={`Bandeira de ${getTeamDisplayName(team)}`} loading="lazy" />;
+}
+
+function teamLabel(team: string, locale: AppLocale = "pt-BR") {
+  return getTeamDisplayName(team, locale);
 }
 
 function formatWeekday(date: Date) {
@@ -318,7 +323,7 @@ function roundLabel(roundIndex: number) {
 }
 
 function shortTeamName(team: string) {
-  return team
+  return teamLabel(team)
     .split(" ")
     .map((part) => part[0])
     .join("")
@@ -330,6 +335,7 @@ export function WorldCupSimulator({
   canSave,
   enableKnockout = false,
   knockoutVariant = "bracket",
+  locale = "pt-BR",
   matches,
   saveAction,
   showStandings = true,
@@ -337,6 +343,7 @@ export function WorldCupSimulator({
   canSave: boolean;
   enableKnockout?: boolean;
   knockoutVariant?: KnockoutVariant;
+  locale?: AppLocale;
   matches: SimulatorMatch[];
   saveAction?: (formData: FormData) => void | Promise<void>;
   showStandings?: boolean;
@@ -569,11 +576,11 @@ export function WorldCupSimulator({
             >
               <span className="knockoutPickSlot">{slot.label}</span>
               {slot.team ? flagFor(slot.team) : <span className="teamFlagPlaceholder" aria-hidden="true" />}
-              <span>{slot.team ?? "A definir"}</span>
+              <span title={slot.team ? teamLabel(slot.team, locale) : undefined}>{slot.team ? teamLabel(slot.team, locale) : "A definir"}</span>
             </button>
           ))}
         </div>
-        <p className="muted">{selectedWinner ? `Palpite: ${selectedWinner} avança` : "Escolha quem avança para liberar a próxima fase."}</p>
+        <p className="muted">{selectedWinner ? `Palpite: ${teamLabel(selectedWinner, locale)} avança` : "Escolha quem avança para liberar a próxima fase."}</p>
       </div>
     );
   }
@@ -656,11 +663,11 @@ export function WorldCupSimulator({
                           </Link>
                         )}
                         <input type="hidden" name="matchId" value={match.id} />
-                        <span className="teamName teamLeft">{flagFor(match.teamA)}<span>{match.teamA}</span></span>
-                        <input aria-label={`Gols de ${match.teamA}`} disabled={inputsDisabled || isSaving} max={MAX_GOALS} min="0" name="goalsA" onChange={(event) => handleScoreChange(match.id, { ...score, goalsA: event.target.value })} required type="number" value={score.goalsA} />
+                        <span className="teamName teamLeft" title={teamLabel(match.teamA, locale)}>{flagFor(match.teamA)}<span>{teamLabel(match.teamA, locale)}</span></span>
+                        <input aria-label={`Gols de ${teamLabel(match.teamA, locale)}`} disabled={inputsDisabled || isSaving} max={MAX_GOALS} min="0" name="goalsA" onChange={(event) => handleScoreChange(match.id, { ...score, goalsA: event.target.value })} required type="number" value={score.goalsA} />
                         <span className="versus">x</span>
-                        <input aria-label={`Gols de ${match.teamB}`} disabled={inputsDisabled || isSaving} max={MAX_GOALS} min="0" name="goalsB" onChange={(event) => handleScoreChange(match.id, { ...score, goalsB: event.target.value })} required type="number" value={score.goalsB} />
-                        <span className="teamName teamRight">{flagFor(match.teamB)}<span>{match.teamB}</span></span>
+                        <input aria-label={`Gols de ${teamLabel(match.teamB, locale)}`} disabled={inputsDisabled || isSaving} max={MAX_GOALS} min="0" name="goalsB" onChange={(event) => handleScoreChange(match.id, { ...score, goalsB: event.target.value })} required type="number" value={score.goalsB} />
+                        <span className="teamName teamRight" title={teamLabel(match.teamB, locale)}>{flagFor(match.teamB)}<span>{teamLabel(match.teamB, locale)}</span></span>
                         <div className="matchActions">
                           {hasOfficialResult ? <span className="saveHint">Encerrado</span> : canSave ? <button disabled={!canSubmit || isSaving} type="submit">{isSaving ? "Salvando..." : "Salvar"}</button> : <span className="saveHint">Entre para salvar</span>}
                           <button className="aiHelpButton" disabled={hasOfficialResult || aiState.status === "loading"} onClick={() => requestMatchAnalysis(match.id)} type="button">
@@ -681,7 +688,7 @@ export function WorldCupSimulator({
                             <div className="matchAiHeader">
                               <div className="matchAiMeta">
                                 <span className="badge badgeGold">{aiState.analysis.source === "local" ? "Assistente local" : "OpenRouter IA"}</span>
-                                <span>Favorito: <strong>{aiState.analysis.favorite}</strong></span>
+                                <span>Favorito: <strong>{teamLabel(aiState.analysis.favorite, locale)}</strong></span>
                                 <span>Risco: <strong>{aiState.analysis.risk}</strong></span>
                               </div>
                               <button className="matchAiClose" onClick={() => closeMatchAnalysis(match.id)} type="button" aria-label="Fechar sugestao da IA">Fechar</button>
@@ -711,7 +718,7 @@ export function WorldCupSimulator({
                       <tbody>
                         {standings.map((team, index) => (
                           <tr className={index < 2 ? "qualifiedRow" : ""} key={team.team}>
-                            <td><span className="teamName">{flagFor(team.team)}<span>{team.team}</span></span></td>
+                            <td><span className="teamName" title={teamLabel(team.team, locale)}>{flagFor(team.team)}<span>{teamLabel(team.team, locale)}</span></span></td>
                             <td className="numberCell">{team.points}</td>
                             <td className="numberCell">{team.played}</td>
                             <td className="numberCell">{team.goalDifference}</td>
@@ -766,7 +773,7 @@ export function WorldCupSimulator({
                   <div className="championCard">
                     <span>Campeão</span>
                     {champion ? (
-                      <strong>{flagFor(champion)}{champion}</strong>
+                      <strong>{flagFor(champion)}{teamLabel(champion, locale)}</strong>
                     ) : (
                       <strong>A definir</strong>
                     )}

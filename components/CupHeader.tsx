@@ -1,19 +1,21 @@
 import Link from "next/link";
 import { AuthButton } from "./AuthButton";
+import { LanguageSwitcher } from "./LanguageSwitcher";
+import { getCurrentLocale, t } from "../lib/i18n";
 
 type ActivePage = "home" | "bolao" | "boloes" | "simulador" | "ranking" | "resultados" | "noticias" | "admin" | "perfil";
 
 const navItems = [
-  { href: "/", label: "Inicio", key: "home" },
-  { href: "/bolao", label: "Palpites", key: "bolao" },
-  { href: "/boloes", label: "Boloes", key: "boloes" },
-  { href: "/simulador", label: "Simulador", key: "simulador" },
-  { href: "/ranking", label: "Ranking", key: "ranking" },
-  { href: "/resultados", label: "Resultados", key: "resultados" },
-  { href: "/noticias", label: "Noticias", key: "noticias" },
+  { href: "/", key: "home" },
+  { href: "/bolao", key: "bolao" },
+  { href: "/boloes", key: "boloes" },
+  { href: "/simulador", key: "simulador" },
+  { href: "/ranking", key: "ranking" },
+  { href: "/resultados", key: "resultados" },
+  { href: "/noticias", key: "noticias" },
 ] as const;
 
-export function CupHeader({
+export async function CupHeader({
   active,
   eyebrow = "Bolao Copa 2026",
   title,
@@ -24,6 +26,9 @@ export function CupHeader({
   title: string;
   description: string;
 }) {
+  const locale = await getCurrentLocale();
+  const copy = t(locale);
+
   return (
     <section className="cupHeader">
       <div className="cupHeaderGlow" aria-hidden="true" />
@@ -38,12 +43,13 @@ export function CupHeader({
               href={item.href}
               key={item.key}
             >
-              {item.label}
+              {copy.nav[item.key]}
             </Link>
           ))}
         </div>
       </div>
       <div className="cupHeaderAccount">
+        <LanguageSwitcher ariaLabel={copy.language.ariaLabel} label={copy.language.label} locale={locale} />
         <AuthButton />
       </div>
     </section>

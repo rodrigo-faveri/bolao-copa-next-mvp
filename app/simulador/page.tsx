@@ -2,6 +2,7 @@ import { auth } from "../../auth";
 import { savePrediction } from "../bolao/actions";
 import { CupHeader } from "../../components/CupHeader";
 import { WorldCupSimulator } from "../../components/WorldCupSimulator";
+import { getCurrentLocale } from "../../lib/i18n";
 import { isPredictionOpen } from "../../lib/prediction";
 import { prisma } from "../../lib/prisma";
 import { allowUnscheduledPredictions } from "../../lib/runtime-config";
@@ -11,6 +12,7 @@ export const dynamic = "force-dynamic";
 
 export default async function SimuladorPage() {
   const session = await auth();
+  const locale = await getCurrentLocale();
   const canSave = Boolean(session?.user?.email);
   const matches = await prisma.match.findMany({ orderBy: [{ group: "asc" }, { startsAt: "asc" }] });
   const user = session?.user?.email
@@ -29,6 +31,7 @@ export default async function SimuladorPage() {
         canSave={canSave}
         enableKnockout
         knockoutVariant="cards"
+        locale={locale}
         saveAction={savePrediction}
         matches={matches.map((match) => {
           const prediction = predictionMap.get(match.id);

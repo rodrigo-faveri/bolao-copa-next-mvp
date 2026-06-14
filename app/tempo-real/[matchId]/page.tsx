@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CupHeader } from "../../../components/CupHeader";
-import { getTeamFlagUrl } from "../../../lib/teams";
+import { getCurrentLocale } from "../../../lib/i18n";
+import { getTeamDisplayName, getTeamFlagUrl } from "../../../lib/teams";
 import { prisma } from "../../../lib/prisma";
 import { getMatchVenue } from "../../../lib/venues";
 
@@ -20,7 +21,7 @@ function flagFor(team: string) {
   const flagUrl = getTeamFlagUrl(team);
   if (!flagUrl) return <span className="teamFlagPlaceholder" aria-hidden="true" />;
   // eslint-disable-next-line @next/next/no-img-element
-  return <img className="teamFlag" src={flagUrl} alt={`Bandeira de ${team}`} loading="lazy" />;
+  return <img className="teamFlag" src={flagUrl} alt={`Bandeira de ${getTeamDisplayName(team)}`} loading="lazy" />;
 }
 
 function getAutomaticStatus(match: { startsAt: Date | null; status: string; resultGoalsA: number | null; resultGoalsB: number | null }, now = new Date()) {
@@ -55,7 +56,7 @@ function buildTimeline(match: {
     events.push({
       minute: "FIM",
       title: "Fim de jogo",
-      description: `${match.teamA} ${match.resultGoalsA} x ${match.resultGoalsB} ${match.teamB}.`,
+      description: `${getTeamDisplayName(match.teamA)} ${match.resultGoalsA} x ${match.resultGoalsB} ${getTeamDisplayName(match.teamB)}.`,
     });
   }
 
@@ -110,6 +111,7 @@ export default async function RealTimePage({ params }: { params: Promise<{ match
   });
 
   if (!match) notFound();
+  const locale = await getCurrentLocale();
 
   const hasResult = match.resultGoalsA !== null && match.resultGoalsB !== null;
   const venue = getMatchVenue(match.group, match.teamA, match.teamB);
@@ -121,6 +123,8 @@ export default async function RealTimePage({ params }: { params: Promise<{ match
   const timeline = manualEvents.length > 0 ? manualEvents : buildTimeline(match);
   const hasDisplayScore = hasResult;
   const statusLabel = getAutomaticStatus(match);
+  const teamALabel = getTeamDisplayName(match.teamA, locale);
+  const teamBLabel = getTeamDisplayName(match.teamB, locale);
   const isLiveLike = ["Ao vivo", "1o tempo", "Intervalo previsto", "2o tempo", "Acréscimos/encerramento previsto"].includes(statusLabel);
 
   return (
@@ -128,7 +132,7 @@ export default async function RealTimePage({ params }: { params: Promise<{ match
       <CupHeader
         active="bolao"
         eyebrow="Tempo real"
-        title={`${match.teamA} x ${match.teamB}`}
+        title={`${teamALabel} x ${teamBLabel}`}
         description="Acompanhe o status da partida e a linha do tempo dos principais lances."
       />
 
@@ -136,7 +140,7 @@ export default async function RealTimePage({ params }: { params: Promise<{ match
         <div className="realTimeScoreboard">
           <div className="realTimeTeam">
             {flagFor(match.teamA)}
-            <strong>{match.teamA}</strong>
+            <strong>{teamALabel}</strong>
           </div>
           <div className="realTimeScore">
             <span className={isLiveLike ? "badge badgeLive" : "badge"}>{statusLabel}</span>
@@ -145,7 +149,7 @@ export default async function RealTimePage({ params }: { params: Promise<{ match
           </div>
           <div className="realTimeTeam realTimeTeamRight">
             {flagFor(match.teamB)}
-            <strong>{match.teamB}</strong>
+            <strong>{teamBLabel}</strong>
           </div>
         </div>
 
