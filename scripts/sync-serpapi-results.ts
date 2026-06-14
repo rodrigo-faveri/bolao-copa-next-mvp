@@ -21,7 +21,7 @@ async function main() {
     return;
   }
 
-  const delayMinutes = readPositiveInt("SERPAPI_RESULT_DELAY_MINUTES", 130);
+  const delayMinutes = readPositiveInt("SERPAPI_RESULT_DELAY_MINUTES", 120);
   const maxMatches = readPositiveInt("SERPAPI_RESULT_MAX_MATCHES", 12);
   const dryRun = hasFlag("--dry-run") || process.env.SERPAPI_DRY_RUN === "true";
   const debug = process.env.SERPAPI_DEBUG === "true";
