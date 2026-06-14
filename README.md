@@ -202,7 +202,17 @@ Para testar sem salvar no banco:
 SERPAPI_DRY_RUN=true npm run result:sync-serpapi
 ```
 
-Em producao, agende esse comando em cron/job a cada 10 ou 15 minutos. Com `SERPAPI_RESULT_MAX_MATCHES="4"`, ele evita gastar muitas consultas por execucao.
+Em producao, agende esse comando em cron/job a cada 10 ou 15 minutos. Use `SERPAPI_RESULT_MAX_MATCHES="12"` para cobrir varias partidas acumuladas na mesma execucao sem deixar jogos antigos presos na fila.
+
+Variaveis relacionadas:
+
+```env
+SERPAPI_KEY=""
+SERPAPI_RESULT_DELAY_MINUTES="130"
+SERPAPI_RESULT_MAX_MATCHES="12"
+SERPAPI_DRY_RUN="false"
+SERPAPI_DEBUG="false"
+```
 
 Use `data/results.example.csv` como modelo. O CSV aceita `match_id` ou a combinacao `group`, `team_a`, `team_b`.
 

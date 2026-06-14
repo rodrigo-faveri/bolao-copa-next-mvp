@@ -1,3 +1,5 @@
+import { getTeamDisplayName, namesLookRelated, normalizeTeamName } from "./teams";
+
 export type SerpApiMatchResult = {
   goalsA: number;
   goalsB: number;
@@ -43,25 +45,6 @@ type SerpApiCardSummary = {
   cards?: Array<{ in_game_time?: { minute?: number; stoppage?: number } }>;
 };
 
-export function normalizeTeamName(value: string) {
-  const normalized = value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/gi, " ")
-    .trim()
-    .toLowerCase();
-
-  const aliases: Record<string, string> = {
-    "africa do sul": "south africa",
-    "coreia do sul": "korea republic",
-    coreia: "korea republic",
-    tchequia: "czechia",
-    mexico: "mexico",
-  };
-
-  return aliases[normalized] ?? normalized;
-}
-
 function parseScore(value?: string) {
   if (!value) return null;
   const parsed = Number(value.replace(/[^\d-]/g, ""));
@@ -72,12 +55,6 @@ function isFinalStatus(status?: string) {
   if (!status) return false;
   const normalized = normalizeTeamName(status);
   return ["ft", "full time", "final", "finished", "encerrado", "fim"].some((item) => normalized.includes(item));
-}
-
-function namesLookRelated(expected: string, actual: string) {
-  const expectedName = normalizeTeamName(expected);
-  const actualName = normalizeTeamName(actual);
-  return expectedName === actualName || expectedName.includes(actualName) || actualName.includes(expectedName);
 }
 
 function findMatchingGame(payload: SerpApiSportsResponse, teamA: string, teamB: string) {
@@ -144,7 +121,7 @@ export function buildSerpApiResultQuery({
   teamB: string;
 }) {
   const year = startsAt?.getUTCFullYear() ?? 2026;
-  return `${teamA} ${teamB} Copa do Mundo ${year} resultado`;
+  return `${getTeamDisplayName(teamA)} ${getTeamDisplayName(teamB)} Copa do Mundo ${year} resultado`;
 }
 
 export async function fetchSerpApiMatchResult({
