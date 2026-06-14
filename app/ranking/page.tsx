@@ -27,15 +27,36 @@ type RankingUser = {
   }>;
 };
 
+type PoolRules = {
+  exactScorePoints: number;
+  outcomePoints: number;
+};
+
 function getOutcome(goalsA: number, goalsB: number) {
   return Math.sign(goalsA - goalsB);
+}
+
+function calculateRankingPoints(
+  prediction: { goalsA: number; goalsB: number },
+  result: { goalsA: number; goalsB: number },
+  rules: PoolRules | null,
+) {
+  if (prediction.goalsA === result.goalsA && prediction.goalsB === result.goalsB) {
+    return rules?.exactScorePoints ?? 5;
+  }
+
+  if (getOutcome(prediction.goalsA, prediction.goalsB) === getOutcome(result.goalsA, result.goalsB)) {
+    return rules?.outcomePoints ?? 3;
+  }
+
+  return 0;
 }
 
 function formatUserName(user: { id: string; name: string | null; nickname: string | null }) {
   return user.nickname?.trim() || user.name?.trim() || `Participante ${user.id.slice(-6)}`;
 }
 
-function buildRankingRows(users: RankingUser[]) {
+function buildRankingRows(users: RankingUser[], rules: PoolRules | null = null) {
   return users
     .map((user) => {
       const hits: RankingHit[] = [];
@@ -47,7 +68,12 @@ function buildRankingRows(users: RankingUser[]) {
         const { match } = prediction;
         if (match.resultGoalsA === null || match.resultGoalsB === null) continue;
         resolvedPredictions += 1;
-        if (prediction.points <= 0) continue;
+        const points = calculateRankingPoints(
+          { goalsA: prediction.goalsA, goalsB: prediction.goalsB },
+          { goalsA: match.resultGoalsA, goalsB: match.resultGoalsB },
+          rules,
+        );
+        if (points <= 0) continue;
 
         const isExact = prediction.goalsA === match.resultGoalsA && prediction.goalsB === match.resultGoalsB;
         const isOutcome = getOutcome(prediction.goalsA, prediction.goalsB) === getOutcome(match.resultGoalsA, match.resultGoalsB);
@@ -60,12 +86,20 @@ function buildRankingRows(users: RankingUser[]) {
           teamB: match.teamB,
           prediction: `${prediction.goalsA} x ${prediction.goalsB}`,
           result: `${match.resultGoalsA} x ${match.resultGoalsB}`,
-          points: prediction.points,
+          points,
           kind: isExact ? "exact" : "outcome",
         });
       }
 
-      const points = user.predictions.reduce((sum, prediction) => sum + prediction.points, 0);
+      const points = user.predictions.reduce((sum, prediction) => {
+        const { match } = prediction;
+        if (match.resultGoalsA === null || match.resultGoalsB === null) return sum;
+        return sum + calculateRankingPoints(
+          { goalsA: prediction.goalsA, goalsB: prediction.goalsB },
+          { goalsA: match.resultGoalsA, goalsB: match.resultGoalsB },
+          rules,
+        );
+      }, 0);
       const scoringHits = exactHits + outcomeHits;
 
       return {
@@ -100,6 +134,7 @@ export default async function RankingPage({ searchParams }: { searchParams?: Pro
   const params = await searchParams;
   const poolInviteCode = typeof params?.bolao === "string" ? params.bolao.toUpperCase() : null;
   let poolName: string | null = null;
+  let poolRules: PoolRules | null = null;
 
   if (poolInviteCode) {
     const membership = await prisma.poolMember.findFirst({
@@ -107,11 +142,15 @@ export default async function RankingPage({ searchParams }: { searchParams?: Pro
         user: { email },
         pool: { inviteCode: poolInviteCode },
       },
-      select: { pool: { select: { name: true } } },
+      select: { pool: { select: { name: true, exactScorePoints: true, outcomePoints: true } } },
     });
 
     if (!membership) redirect("/boloes");
     poolName = membership.pool.name;
+    poolRules = {
+      exactScorePoints: membership.pool.exactScorePoints,
+      outcomePoints: membership.pool.outcomePoints,
+    };
   }
 
   const users = await prisma.user.findMany({
@@ -124,7 +163,7 @@ export default async function RankingPage({ searchParams }: { searchParams?: Pro
     },
   });
 
-  const rankingRows: RankingRow[] = buildRankingRows(users);
+  const rankingRows: RankingRow[] = buildRankingRows(users, poolRules);
   const podium = rankingRows.slice(0, 3);
 
   return (

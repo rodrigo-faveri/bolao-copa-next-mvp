@@ -21,6 +21,16 @@ const PoolIdSchema = z.object({
   poolId: z.string().cuid(),
 });
 
+const PoolRulesSchema = z.object({
+  poolId: z.string().cuid(),
+  exactScorePoints: z.coerce.number().int().min(1).max(20),
+  outcomePoints: z.coerce.number().int().min(0).max(20),
+  mode: z.enum(["friends", "family", "competitive"]),
+}).refine((data) => data.exactScorePoints >= data.outcomePoints, {
+  message: "Placar exato precisa valer pelo menos o mesmo que resultado certo.",
+  path: ["exactScorePoints"],
+});
+
 const RemoveMemberSchema = z.object({
   poolId: z.string().cuid(),
   memberId: z.string().cuid(),
@@ -159,6 +169,58 @@ export async function renamePool(formData: FormData) {
 
   revalidatePath("/boloes");
   revalidatePath(`/boloes/${pool.inviteCode}`);
+}
+
+export async function updatePoolRules(formData: FormData) {
+  const user = await getCurrentUser();
+  await assertRateLimit(`pool:rules:${user.email}`, 10, poolActionRateLimitWindowMs);
+
+  const result = PoolRulesSchema.safeParse({
+    poolId: formData.get("poolId"),
+    exactScorePoints: formData.get("exactScorePoints"),
+    outcomePoints: formData.get("outcomePoints"),
+    mode: formData.get("mode"),
+  });
+  if (!result.success) throw new Error("Regras do bolao invalidas.");
+
+  await assertPoolOwner(result.data.poolId, user.id);
+
+  const pool = await prisma.$transaction(async (transaction) => {
+    const updated = await transaction.pool.update({
+      where: { id: result.data.poolId },
+      data: {
+        exactScorePoints: result.data.exactScorePoints,
+        outcomePoints: result.data.outcomePoints,
+        mode: result.data.mode,
+      },
+      select: {
+        id: true,
+        inviteCode: true,
+        exactScorePoints: true,
+        outcomePoints: true,
+        mode: true,
+      },
+    });
+
+    await createAuditLog(transaction, {
+      actorId: user.id,
+      actorEmail: user.email,
+      action: "pool_rules_updated",
+      entity: "pool",
+      entityId: updated.id,
+      metadata: {
+        exactScorePoints: updated.exactScorePoints,
+        outcomePoints: updated.outcomePoints,
+        mode: updated.mode,
+      },
+    });
+
+    return updated;
+  });
+
+  revalidatePath("/boloes");
+  revalidatePath(`/boloes/${pool.inviteCode}`);
+  revalidatePath(`/ranking?bolao=${pool.inviteCode}`);
 }
 
 export async function regeneratePoolInvite(formData: FormData) {

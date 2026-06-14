@@ -14,6 +14,12 @@ function getInviteUrl(inviteCode: string) {
   return `${baseUrl.replace(/\/$/, "")}/boloes?convite=${inviteCode}`;
 }
 
+function getPoolModeLabel(mode: string, copy: ReturnType<typeof t>) {
+  if (mode === "family") return copy.pools.mode_family;
+  if (mode === "competitive") return copy.pools.mode_competitive;
+  return copy.pools.mode_friends;
+}
+
 export default async function BoloesPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await auth();
   const email = session?.user?.email;
@@ -88,12 +94,18 @@ export default async function BoloesPage({ searchParams }: { searchParams?: Prom
             {user.poolMemberships.map((membership) => {
               const ownerName = membership.pool.createdBy?.nickname || membership.pool.createdBy?.name || copy.auth.guest;
               const inviteUrl = getInviteUrl(membership.pool.inviteCode);
+              const poolMode = getPoolModeLabel(membership.pool.mode, copy);
 
               return (
                 <article className="poolListItem" key={membership.id}>
                   <div>
                     <span className="badge">{membership.role === "owner" ? copy.pools.owner : copy.pools.member}</span>
                     <h3>{membership.pool.name}</h3>
+                    <p className="poolRulesSummary">
+                      <span>{poolMode}</span>
+                      <span>{formatMessage(copy.pools.exactRule, { points: membership.pool.exactScorePoints })}</span>
+                      <span>{formatMessage(copy.pools.outcomeRule, { points: membership.pool.outcomePoints })}</span>
+                    </p>
                     <p className="muted">{formatMessage(copy.pools.participantsCount, { count: membership.pool._count.members })} · {formatMessage(copy.pools.createdBy, { owner: ownerName })}</p>
                   </div>
                   <div className="poolInviteBox">

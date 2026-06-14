@@ -120,6 +120,10 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .poolForm { display: grid; gap: 12px; }
 .poolForm label { display: grid; gap: 7px; color: #617068; font-size: .82rem; font-weight: 900; text-transform: uppercase; }
 .poolForm input { width: 100%; text-align: left; }
+.poolRulesForm { margin-top: 4px; padding-top: 14px; border-top: 1px solid #e7eee9; }
+.poolRulesForm input[type="number"] { text-align: center; }
+.poolRulesSummary { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; }
+.poolRulesSummary span { padding: 6px 9px; border: 1px solid #dce5df; border-radius: 999px; background: #f8fbf9; color: #617068; font-size: .78rem; font-weight: 900; }
 .poolListCard { overflow: hidden; }
 .poolList { display: grid; }
 .poolListItem { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, .8fr); gap: 16px; align-items: center; padding: 18px 24px; border-bottom: 1px solid #e7eee9; }
