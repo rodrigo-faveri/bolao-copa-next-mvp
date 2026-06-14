@@ -129,6 +129,22 @@ model AuditLog {
   @@index([createdAt])
 }
 
+model ResultSyncRun {
+  id           String    @id @default(cuid())
+  provider     String
+  status       String
+  imported     Int       @default(0)
+  skipped      Int       @default(0)
+  candidates   Int       @default(0)
+  errorMessage String?
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+
+  @@index([provider])
+  @@index([status])
+  @@index([startedAt])
+}
+
 model Pool {
   id          String       @id @default(cuid())
   name        String
