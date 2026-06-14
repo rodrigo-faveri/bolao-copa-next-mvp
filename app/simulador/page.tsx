@@ -2,6 +2,8 @@ import { auth } from "../../auth";
 import { savePrediction } from "../bolao/actions";
 import { CupHeader } from "../../components/CupHeader";
 import { WorldCupSimulator } from "../../components/WorldCupSimulator";
+import { getCurrentLocale } from "../../lib/i18n";
+import { t } from "../../lib/i18n-shared";
 import { isPredictionOpen } from "../../lib/prediction";
 import { prisma } from "../../lib/prisma";
 import { allowUnscheduledPredictions } from "../../lib/runtime-config";
@@ -11,6 +13,8 @@ export const dynamic = "force-dynamic";
 
 export default async function SimuladorPage() {
   const session = await auth();
+  const locale = await getCurrentLocale();
+  const copy = t(locale);
   const canSave = Boolean(session?.user?.email);
   const matches = await prisma.match.findMany({ orderBy: [{ group: "asc" }, { startsAt: "asc" }] });
   const user = session?.user?.email
@@ -21,14 +25,15 @@ export default async function SimuladorPage() {
 
   return (
     <main className="container bolaoPage">
-      <CupHeader active="simulador" title="Simulador da Copa" description="Preencha a fase de grupos, veja a classificação mudar e avance os vencedores no mata-mata." />
+      <CupHeader active="simulador" title={copy.simulatorPage.title} description={copy.simulatorPage.description} />
 
-      {!session?.user && <div className="notice">Faça login para salvar seus palpites no simulador.</div>}
+      {!session?.user && <div className="notice">{copy.simulatorPage.loginNotice}</div>}
 
       <WorldCupSimulator
         canSave={canSave}
         enableKnockout
         knockoutVariant="cards"
+        locale={locale}
         saveAction={savePrediction}
         matches={matches.map((match) => {
           const prediction = predictionMap.get(match.id);

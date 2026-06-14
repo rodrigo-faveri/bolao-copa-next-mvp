@@ -4,6 +4,8 @@ import { auth } from "../../auth";
 import { CupHeader } from "../../components/CupHeader";
 import { PredictionDeadlineAlerts } from "../../components/PredictionDeadlineAlerts";
 import { WorldCupSimulator } from "../../components/WorldCupSimulator";
+import { getCurrentLocale } from "../../lib/i18n";
+import { formatMessage, t } from "../../lib/i18n-shared";
 import { isPredictionOpen, PREDICTION_CLOSE_MINUTES } from "../../lib/prediction";
 import { prisma } from "../../lib/prisma";
 import { allowUnscheduledPredictions } from "../../lib/runtime-config";
@@ -17,6 +19,8 @@ export default async function BolaoPage({ searchParams }: { searchParams?: Promi
   const email = session?.user?.email;
   if (!email) redirect("/");
 
+  const locale = await getCurrentLocale();
+  const copy = t(locale);
   const params = await searchParams;
   const poolInviteCode = typeof params?.bolao === "string" ? params.bolao.toUpperCase() : null;
   let selectedPool: { name: string; inviteCode: string } | null = null;
@@ -44,37 +48,38 @@ export default async function BolaoPage({ searchParams }: { searchParams?: Promi
 
   return (
     <main className="container bolaoPage">
-      <CupHeader active="bolao" title="Meus palpites" description="Escolha os placares rodada por rodada e acompanhe sua disputa com os amigos." />
+      <CupHeader active="bolao" title={copy.bolao.title} description={copy.bolao.description} />
 
       {allowUnscheduledPredictions && (
-        <div className="notice noticeCompact noticeInline"><strong>Modo local</strong><span>Partidas sem horário definido ficam abertas para teste.</span></div>
+        <div className="notice noticeCompact noticeInline"><strong>{copy.bolao.localMode}</strong><span>{copy.bolao.localModeText}</span></div>
       )}
 
-      {!session?.user && <div className="notice">Faça login para salvar seus palpites.</div>}
+      {!session?.user && <div className="notice">{copy.bolao.loginNotice}</div>}
 
       <section className="pageToolbar">
-        <div><span className="badge badgeGold">Bolão Copa 2026</span><h2>Palpites por etapa</h2></div>
-        <div className="toolbarTips"><span>Use as abas para alternar etapas</span><span>Fecha {PREDICTION_CLOSE_MINUTES} min antes</span></div>
+        <div><span className="badge badgeGold">{copy.bolao.toolbarBadge}</span><h2>{copy.bolao.toolbarTitle}</h2></div>
+        <div className="toolbarTips"><span>{copy.bolao.tabTip}</span><span>{formatMessage(copy.bolao.closesBefore, { minutes: PREDICTION_CLOSE_MINUTES })}</span></div>
       </section>
 
       {selectedPool && (
         <section className="poolContextBanner">
           <div>
-            <span className="badge badgeGold">Bolao privado</span>
+            <span className="badge badgeGold">{copy.bolao.privatePool}</span>
             <h2>{selectedPool.name}</h2>
-            <p className="muted">Seus palpites continuam pessoais; este contexto ajuda a acompanhar a disputa do grupo.</p>
+            <p className="muted">{copy.bolao.poolDescription}</p>
           </div>
           <div className="poolContextActions">
-            <Link className="buttonLink" href={`/ranking?bolao=${selectedPool.inviteCode}`}>Ranking do bolao</Link>
-            <Link className="buttonLink buttonSecondary" href={`/boloes/${selectedPool.inviteCode}`}>Detalhes</Link>
+            <Link className="buttonLink" href={`/ranking?bolao=${selectedPool.inviteCode}`}>{copy.bolao.poolRanking}</Link>
+            <Link className="buttonLink buttonSecondary" href={`/boloes/${selectedPool.inviteCode}`}>{copy.bolao.details}</Link>
           </div>
         </section>
       )}
 
-      {matches.length === 0 && <div className="notice">Nenhuma partida foi importada.</div>}
+      {matches.length === 0 && <div className="notice">{copy.bolao.noMatches}</div>}
 
       {matches.length > 0 && (
         <PredictionDeadlineAlerts
+          locale={locale}
           matches={matches.map((match) => ({
             id: match.id,
             teamA: match.teamA,
@@ -89,6 +94,7 @@ export default async function BolaoPage({ searchParams }: { searchParams?: Promi
         canSave={canSave}
         enableKnockout
         knockoutVariant="cards"
+        locale={locale}
         saveAction={savePrediction}
         showStandings={false}
         matches={matches.map((match) => {

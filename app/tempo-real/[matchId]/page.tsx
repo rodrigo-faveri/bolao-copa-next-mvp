@@ -1,41 +1,47 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CupHeader } from "../../../components/CupHeader";
-import { getTeamFlagUrl } from "../../../lib/teams";
+import { getCurrentLocale } from "../../../lib/i18n";
+import { formatMessage, t } from "../../../lib/i18n-shared";
+import type { AppLocale } from "../../../lib/i18n-shared";
+import { getTeamDisplayName, getTeamFlagUrl } from "../../../lib/teams";
 import { prisma } from "../../../lib/prisma";
 import { getMatchVenue } from "../../../lib/venues";
 
 export const dynamic = "force-dynamic";
 
-const dateFormatter = new Intl.DateTimeFormat("pt-BR", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "America/Sao_Paulo",
-});
+function formatMatchDate(date: Date, locale: AppLocale) {
+  return new Intl.DateTimeFormat(locale, {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Sao_Paulo",
+  }).format(date);
+}
 
-function flagFor(team: string) {
+function flagFor(team: string, locale: AppLocale) {
   const flagUrl = getTeamFlagUrl(team);
   if (!flagUrl) return <span className="teamFlagPlaceholder" aria-hidden="true" />;
   // eslint-disable-next-line @next/next/no-img-element
-  return <img className="teamFlag" src={flagUrl} alt={`Bandeira de ${team}`} loading="lazy" />;
+  return <img className="teamFlag" src={flagUrl} alt={`Bandeira de ${getTeamDisplayName(team, locale)}`} loading="lazy" />;
 }
 
-function getAutomaticStatus(match: { startsAt: Date | null; status: string; resultGoalsA: number | null; resultGoalsB: number | null }, now = new Date()) {
+function getAutomaticStatus(match: { startsAt: Date | null; status: string; resultGoalsA: number | null; resultGoalsB: number | null }, locale: AppLocale, now = new Date()) {
+  const copy = t(locale);
   const hasResult = match.resultGoalsA !== null && match.resultGoalsB !== null;
-  if (hasResult || match.status === "finished") return "Encerrada";
-  if (match.status === "live") return "Ao vivo";
-  if (!match.startsAt) return "Agendada";
+  if (hasResult || match.status === "finished") return copy.common.finished;
+  if (match.status === "live") return copy.common.live;
+  if (!match.startsAt) return copy.realtime.scheduled;
 
   const elapsedMinutes = Math.floor((now.getTime() - match.startsAt.getTime()) / 60000);
-  if (elapsedMinutes < 0) return "Agendada";
-  if (elapsedMinutes <= 45) return "1o tempo";
-  if (elapsedMinutes <= 60) return "Intervalo previsto";
-  if (elapsedMinutes <= 105) return "2o tempo";
-  if (elapsedMinutes <= 130) return "Acréscimos/encerramento previsto";
-  return "Aguardando resultado";
+  if (elapsedMinutes < 0) return copy.realtime.scheduled;
+  if (elapsedMinutes <= 45) return copy.realtime.firstHalf;
+  if (elapsedMinutes <= 60) return copy.realtime.expectedHalftime;
+  if (elapsedMinutes <= 105) return copy.realtime.secondHalf;
+  if (elapsedMinutes <= 130) return copy.realtime.expectedEnding;
+  return copy.realtime.waitingResult;
 }
 
 function buildTimeline(match: {
@@ -45,7 +51,8 @@ function buildTimeline(match: {
   resultGoalsB: number | null;
   teamA: string;
   teamB: string;
-}) {
+}, locale: AppLocale) {
+  const copy = t(locale);
   const hasResult = match.resultGoalsA !== null && match.resultGoalsB !== null;
   const events: Array<{ minute: string; title: string; description: string }> = [];
   const now = new Date();
@@ -54,48 +61,32 @@ function buildTimeline(match: {
   if (hasResult) {
     events.push({
       minute: "FIM",
-      title: "Fim de jogo",
-      description: `${match.teamA} ${match.resultGoalsA} x ${match.resultGoalsB} ${match.teamB}.`,
+      title: copy.realtime.fullTime,
+      description: `${getTeamDisplayName(match.teamA, locale)} ${match.resultGoalsA} x ${match.resultGoalsB} ${getTeamDisplayName(match.teamB, locale)}.`,
     });
   }
 
   if (elapsedMinutes !== null && elapsedMinutes >= 105 && !hasResult) {
-    events.push({
-      minute: "90'",
-      title: "Fim previsto",
-      description: "Tempo regulamentar estimado encerrado. Aguardando confirmacao do resultado oficial.",
-    });
+    events.push({ minute: "90'", title: copy.realtime.expectedFullTime, description: copy.realtime.expectedFullTimeDescription });
   }
 
   if (elapsedMinutes !== null && elapsedMinutes >= 60) {
-    events.push({
-      minute: "46'",
-      title: "Segundo tempo previsto",
-      description: "A partida entrou na janela estimada do segundo tempo.",
-    });
+    events.push({ minute: "46'", title: copy.realtime.secondHalfExpected, description: copy.realtime.secondHalfDescription });
   }
 
   if (elapsedMinutes !== null && elapsedMinutes >= 45) {
-    events.push({
-      minute: "45'",
-      title: "Intervalo previsto",
-      description: "A partida entrou na janela estimada de intervalo.",
-    });
+    events.push({ minute: "45'", title: copy.realtime.halftimeExpected, description: copy.realtime.halftimeDescription });
   }
 
   if (match.status === "live") {
-    events.push({
-      minute: "AGORA",
-      title: "Partida em andamento",
-      description: "Status marcado como ao vivo no admin.",
-    });
+    events.push({ minute: "AGORA", title: copy.realtime.inProgress, description: copy.realtime.inProgressDescription });
   }
 
   if (match.startsAt) {
     events.push({
       minute: "00'",
-      title: "Inicio previsto",
-      description: `Partida marcada para ${dateFormatter.format(match.startsAt)}.`,
+      title: copy.realtime.startExpected,
+      description: formatMessage(copy.realtime.startExpectedDescription, { date: formatMatchDate(match.startsAt, locale) }),
     });
   }
 
@@ -110,7 +101,8 @@ export default async function RealTimePage({ params }: { params: Promise<{ match
   });
 
   if (!match) notFound();
-
+  const locale = await getCurrentLocale();
+  const copy = t(locale);
   const hasResult = match.resultGoalsA !== null && match.resultGoalsB !== null;
   const venue = getMatchVenue(match.group, match.teamA, match.teamB);
   const manualEvents = match.events.map((event) => ({
@@ -118,51 +110,59 @@ export default async function RealTimePage({ params }: { params: Promise<{ match
     title: event.title,
     description: event.description,
   }));
-  const timeline = manualEvents.length > 0 ? manualEvents : buildTimeline(match);
-  const hasDisplayScore = hasResult;
-  const statusLabel = getAutomaticStatus(match);
-  const isLiveLike = ["Ao vivo", "1o tempo", "Intervalo previsto", "2o tempo", "Acréscimos/encerramento previsto"].includes(statusLabel);
+  const timeline = manualEvents.length > 0 ? manualEvents : buildTimeline(match, locale);
+  const statusLabel = getAutomaticStatus(match, locale);
+  const teamALabel = getTeamDisplayName(match.teamA, locale);
+  const teamBLabel = getTeamDisplayName(match.teamB, locale);
+  const liveLabels: string[] = [
+    copy.common.live,
+    copy.realtime.firstHalf,
+    copy.realtime.expectedHalftime,
+    copy.realtime.secondHalf,
+    copy.realtime.expectedEnding,
+  ];
+  const isLiveLike = liveLabels.includes(statusLabel);
 
   return (
     <main className="container bolaoPage">
       <CupHeader
         active="bolao"
-        eyebrow="Tempo real"
-        title={`${match.teamA} x ${match.teamB}`}
-        description="Acompanhe o status da partida e a linha do tempo dos principais lances."
+        eyebrow={copy.realtime.eyebrow}
+        title={`${teamALabel} x ${teamBLabel}`}
+        description={copy.realtime.description}
       />
 
       <section className="realTimeHero">
         <div className="realTimeScoreboard">
           <div className="realTimeTeam">
-            {flagFor(match.teamA)}
-            <strong>{match.teamA}</strong>
+            {flagFor(match.teamA, locale)}
+            <strong>{teamALabel}</strong>
           </div>
           <div className="realTimeScore">
             <span className={isLiveLike ? "badge badgeLive" : "badge"}>{statusLabel}</span>
-            <strong>{hasDisplayScore ? `${match.resultGoalsA} x ${match.resultGoalsB}` : "x"}</strong>
-            <small>{match.startsAt ? dateFormatter.format(match.startsAt) : "Horario a definir"}</small>
+            <strong>{hasResult ? `${match.resultGoalsA} x ${match.resultGoalsB}` : "x"}</strong>
+            <small>{match.startsAt ? formatMatchDate(match.startsAt, locale) : copy.realtime.unknownSchedule}</small>
           </div>
           <div className="realTimeTeam realTimeTeamRight">
-            {flagFor(match.teamB)}
-            <strong>{match.teamB}</strong>
+            {flagFor(match.teamB, locale)}
+            <strong>{teamBLabel}</strong>
           </div>
         </div>
 
         <div className="realTimeMeta">
-          <span>Grupo {match.group}</span>
+          <span>{copy.common.group} {match.group}</span>
           <span>{venue}</span>
-          <span>{manualEvents.length} lance(s) cadastrado(s)</span>
-          {match.liveUrl && <a href={match.liveUrl} target="_blank" rel="noreferrer">Ver fonte externa</a>}
-          <Link href="/bolao">Voltar para palpites</Link>
+          <span>{formatMessage(copy.realtime.registeredEvents, { count: manualEvents.length })}</span>
+          {match.liveUrl && <a href={match.liveUrl} target="_blank" rel="noreferrer">{copy.realtime.externalSource}</a>}
+          <Link href="/bolao">{copy.common.backToPicks}</Link>
         </div>
       </section>
 
       <section className="realTimeTimeline">
         <div className="realTimeTimelineHeader">
-          <span className="badge badgeGold">Lances</span>
-          <h2>Tempo real</h2>
-          <p>{manualEvents.length > 0 ? "Lances cadastrados pelo admin do bolao." : "Linha do tempo automatica baseada no horario da partida. Para lances detalhados, use o link externo quando disponivel."}</p>
+          <span className="badge badgeGold">{copy.realtime.events}</span>
+          <h2>{copy.realtime.timeline}</h2>
+          <p>{manualEvents.length > 0 ? copy.realtime.adminEvents : copy.realtime.automaticTimeline}</p>
         </div>
 
         <div className="timelineList">

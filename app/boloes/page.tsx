@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "../../auth";
 import { CupHeader } from "../../components/CupHeader";
+import { getCurrentLocale } from "../../lib/i18n";
+import { formatMessage, t } from "../../lib/i18n-shared";
 import { prisma } from "../../lib/prisma";
 import { createPool, joinPool } from "./actions";
 
@@ -17,6 +19,8 @@ export default async function BoloesPage({ searchParams }: { searchParams?: Prom
   const email = session?.user?.email;
   if (!email) redirect("/");
 
+  const locale = await getCurrentLocale();
+  const copy = t(locale);
   const params = await searchParams;
   const inviteParam = typeof params?.convite === "string" ? params.convite.toUpperCase() : "";
 
@@ -42,30 +46,30 @@ export default async function BoloesPage({ searchParams }: { searchParams?: Prom
 
   return (
     <main className="container bolaoPage">
-      <CupHeader active="boloes" title="Meus bolões" description="Crie grupos privados, compartilhe o convite e dispute com seus amigos." />
+      <CupHeader active="boloes" title={copy.pools.title} description={copy.pools.description} />
 
       <section className="poolActionsGrid">
         <article className="poolActionCard">
-          <span className="badge badgeGold">Criar</span>
-          <h2>Novo bolão privado</h2>
+          <span className="badge badgeGold">{copy.pools.create}</span>
+          <h2>{copy.pools.newPrivate}</h2>
           <form action={createPool} className="poolForm">
             <label>
-              <span>Nome do bolão</span>
-              <input maxLength={48} minLength={3} name="name" placeholder="Ex.: Família Copa 2026" required type="text" />
+              <span>{copy.pools.poolName}</span>
+              <input maxLength={48} minLength={3} name="name" placeholder={copy.pools.poolPlaceholder} required type="text" />
             </label>
-            <button type="submit">Criar bolão</button>
+            <button type="submit">{copy.pools.createPool}</button>
           </form>
         </article>
 
         <article className="poolActionCard">
-          <span className="badge">Entrar</span>
-          <h2>Tenho um convite</h2>
+          <span className="badge">{copy.pools.join}</span>
+          <h2>{copy.pools.hasInvite}</h2>
           <form action={joinPool} className="poolForm">
             <label>
-              <span>Código do convite</span>
+              <span>{copy.pools.inviteCode}</span>
               <input defaultValue={inviteParam} maxLength={24} minLength={6} name="inviteCode" placeholder="ABC12345" required type="text" />
             </label>
-            <button className="buttonSecondary" type="submit">Entrar no bolão</button>
+            <button className="buttonSecondary" type="submit">{copy.pools.joinPool}</button>
           </form>
         </article>
       </section>
@@ -73,39 +77,39 @@ export default async function BoloesPage({ searchParams }: { searchParams?: Prom
       <section className="poolListCard">
         <div className="rankingHeader">
           <div>
-            <span className="badge badgeGold">Privados</span>
-            <h2>Bolões que participo</h2>
+            <span className="badge badgeGold">{copy.pools.private}</span>
+            <h2>{copy.pools.participating}</h2>
           </div>
-          <span className="muted">{user.poolMemberships.length} bolão(ões)</span>
+          <span className="muted">{formatMessage(copy.pools.poolCount, { count: user.poolMemberships.length })}</span>
         </div>
 
         {user.poolMemberships.length > 0 ? (
           <div className="poolList">
             {user.poolMemberships.map((membership) => {
-              const ownerName = membership.pool.createdBy?.nickname || membership.pool.createdBy?.name || "Participante";
+              const ownerName = membership.pool.createdBy?.nickname || membership.pool.createdBy?.name || copy.auth.guest;
               const inviteUrl = getInviteUrl(membership.pool.inviteCode);
 
               return (
                 <article className="poolListItem" key={membership.id}>
                   <div>
-                    <span className="badge">{membership.role === "owner" ? "Dono" : "Membro"}</span>
+                    <span className="badge">{membership.role === "owner" ? copy.pools.owner : copy.pools.member}</span>
                     <h3>{membership.pool.name}</h3>
-                    <p className="muted">{membership.pool._count.members} participante(s) · criado por {ownerName}</p>
+                    <p className="muted">{formatMessage(copy.pools.participantsCount, { count: membership.pool._count.members })} · {formatMessage(copy.pools.createdBy, { owner: ownerName })}</p>
                   </div>
                   <div className="poolInviteBox">
-                    <span>Código</span>
+                    <span>{copy.pools.code}</span>
                     <strong>{membership.pool.inviteCode}</strong>
-                    <input readOnly value={inviteUrl} aria-label={`Link de convite do bolão ${membership.pool.name}`} />
-                    <Link className="buttonLink" href={`/bolao?bolao=${membership.pool.inviteCode}`}>Palpitar neste bolão</Link>
-                    <Link className="buttonLink buttonSecondary" href={`/boloes/${membership.pool.inviteCode}`}>Detalhes</Link>
-                    <Link className="buttonLink buttonSecondary" href={`/ranking?bolao=${membership.pool.inviteCode}`}>Ver ranking</Link>
+                    <input readOnly value={inviteUrl} aria-label={formatMessage(copy.pools.inviteAria, { pool: membership.pool.name })} />
+                    <Link className="buttonLink" href={`/bolao?bolao=${membership.pool.inviteCode}`}>{copy.pools.pickInPool}</Link>
+                    <Link className="buttonLink buttonSecondary" href={`/boloes/${membership.pool.inviteCode}`}>{copy.pools.details}</Link>
+                    <Link className="buttonLink buttonSecondary" href={`/ranking?bolao=${membership.pool.inviteCode}`}>{copy.pools.seeRanking}</Link>
                   </div>
                 </article>
               );
             })}
           </div>
         ) : (
-          <p className="emptyRanking muted">Você ainda não participa de nenhum bolão privado.</p>
+          <p className="emptyRanking muted">{copy.pools.empty}</p>
         )}
       </section>
     </main>

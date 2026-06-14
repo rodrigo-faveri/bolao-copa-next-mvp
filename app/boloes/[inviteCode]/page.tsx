@@ -2,6 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "../../../auth";
 import { CupHeader } from "../../../components/CupHeader";
+import { getCurrentLocale } from "../../../lib/i18n";
+import { formatMessage, t } from "../../../lib/i18n-shared";
 import { prisma } from "../../../lib/prisma";
 import { regeneratePoolInvite, removePoolMember, renamePool } from "../actions";
 
@@ -12,8 +14,8 @@ function getInviteUrl(inviteCode: string) {
   return `${baseUrl.replace(/\/$/, "")}/boloes?convite=${inviteCode}`;
 }
 
-function displayName(user: { id: string; name: string | null; nickname: string | null; email: string | null }) {
-  return user.nickname?.trim() || user.name?.trim() || user.email || `Participante ${user.id.slice(-6)}`;
+function displayName(user: { id: string; name: string | null; nickname: string | null; email: string | null }, fallback: string) {
+  return user.nickname?.trim() || user.name?.trim() || user.email || `${fallback} ${user.id.slice(-6)}`;
 }
 
 export default async function PoolDetailsPage({ params }: { params: Promise<{ inviteCode: string }> }) {
@@ -21,6 +23,8 @@ export default async function PoolDetailsPage({ params }: { params: Promise<{ in
   const email = session?.user?.email;
   if (!email) redirect("/");
 
+  const locale = await getCurrentLocale();
+  const copy = t(locale);
   const { inviteCode } = await params;
   const normalizedInviteCode = inviteCode.toUpperCase();
 
@@ -45,36 +49,36 @@ export default async function PoolDetailsPage({ params }: { params: Promise<{ in
 
   return (
     <main className="container bolaoPage">
-      <CupHeader active="boloes" title={pool.name} description="Gerencie o convite, acompanhe membros e abra o ranking privado deste bolão." />
+      <CupHeader active="boloes" title={pool.name} description={copy.pools.detailsDescription} />
 
       <section className="poolDetailsGrid">
         <article className="poolActionCard">
-          <span className="badge badgeGold">Convite</span>
-          <h2>Compartilhe com amigos</h2>
+          <span className="badge badgeGold">{copy.pools.invite}</span>
+          <h2>{copy.pools.share}</h2>
           <div className="poolInviteBox">
-            <span>Código</span>
+            <span>{copy.pools.code}</span>
             <strong>{pool.inviteCode}</strong>
-            <input readOnly value={inviteUrl} aria-label={`Link de convite do bolão ${pool.name}`} />
-            <Link className="buttonLink" href={`/bolao?bolao=${pool.inviteCode}`}>Palpitar neste bolão</Link>
-            <Link className="buttonLink" href={`/ranking?bolao=${pool.inviteCode}`}>Abrir ranking privado</Link>
+            <input readOnly value={inviteUrl} aria-label={formatMessage(copy.pools.inviteAria, { pool: pool.name })} />
+            <Link className="buttonLink" href={`/bolao?bolao=${pool.inviteCode}`}>{copy.pools.pickInPool}</Link>
+            <Link className="buttonLink" href={`/ranking?bolao=${pool.inviteCode}`}>{copy.pools.openPrivateRanking}</Link>
           </div>
         </article>
 
         {isOwner && (
           <article className="poolActionCard">
-            <span className="badge">Dono</span>
-            <h2>Configurações</h2>
+            <span className="badge">{copy.pools.owner}</span>
+            <h2>{copy.pools.settings}</h2>
             <form action={renamePool} className="poolForm">
               <input name="poolId" type="hidden" value={pool.id} />
               <label>
-                <span>Nome do bolão</span>
+                <span>{copy.pools.poolName}</span>
                 <input defaultValue={pool.name} maxLength={48} minLength={3} name="name" required type="text" />
               </label>
-              <button type="submit">Salvar nome</button>
+              <button type="submit">{copy.pools.saveName}</button>
             </form>
             <form action={regeneratePoolInvite} className="poolForm">
               <input name="poolId" type="hidden" value={pool.id} />
-              <button className="buttonSecondary" type="submit">Gerar novo convite</button>
+              <button className="buttonSecondary" type="submit">{copy.pools.regenerateInvite}</button>
             </form>
           </article>
         )}
@@ -83,24 +87,24 @@ export default async function PoolDetailsPage({ params }: { params: Promise<{ in
       <section className="poolListCard">
         <div className="rankingHeader">
           <div>
-            <span className="badge badgeGold">Membros</span>
-            <h2>Participantes</h2>
+            <span className="badge badgeGold">{copy.pools.members}</span>
+            <h2>{copy.pools.participants}</h2>
           </div>
-          <span className="muted">{pool.members.length} participante(s)</span>
+          <span className="muted">{formatMessage(copy.pools.participantsCount, { count: pool.members.length })}</span>
         </div>
 
         <div className="poolMemberList">
           {pool.members.map((member) => (
             <article className="poolMemberItem" key={member.id}>
               <div>
-                <strong>{displayName(member.user)}</strong>
-                <span>{member.role === "owner" ? "Dono" : "Membro"}</span>
+                <strong>{displayName(member.user, copy.auth.guest)}</strong>
+                <span>{member.role === "owner" ? copy.pools.owner : copy.pools.member}</span>
               </div>
               {isOwner && member.role !== "owner" && (
                 <form action={removePoolMember}>
                   <input name="poolId" type="hidden" value={pool.id} />
                   <input name="memberId" type="hidden" value={member.id} />
-                  <button className="buttonDanger" type="submit">Remover</button>
+                  <button className="buttonDanger" type="submit">{copy.pools.remove}</button>
                 </form>
               )}
             </article>
