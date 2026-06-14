@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { auth } from "../../auth";
 import { CupHeader } from "../../components/CupHeader";
 import { RankingDetails, type RankingHit, type RankingRow } from "../../components/RankingDetails";
+import { getCurrentLocale } from "../../lib/i18n";
+import { formatMessage, t } from "../../lib/i18n-shared";
 import { prisma } from "../../lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -93,6 +95,8 @@ export default async function RankingPage({ searchParams }: { searchParams?: Pro
   const email = session?.user?.email;
   if (!email) redirect("/");
 
+  const locale = await getCurrentLocale();
+  const copy = t(locale);
   const params = await searchParams;
   const poolInviteCode = typeof params?.bolao === "string" ? params.bolao.toUpperCase() : null;
   let poolName: string | null = null;
@@ -127,18 +131,18 @@ export default async function RankingPage({ searchParams }: { searchParams?: Pro
     <main className="container bolaoPage">
       <CupHeader
         active="ranking"
-        title={poolName ? `Ranking: ${poolName}` : "Ranking"}
-        description={poolName ? "Acompanhe a disputa apenas entre participantes deste bolao privado." : "Acompanhe quem esta mandando melhor nos palpites da Copa."}
+        title={poolName ? formatMessage(copy.ranking.poolTitle, { pool: poolName }) : copy.ranking.title}
+        description={poolName ? copy.ranking.poolDescription : copy.ranking.description}
       />
 
       {podium.length > 0 && (
         <section className="podiumGrid">
           {podium.map((row) => (
             <article className={`podiumCard podiumCard${row.position}`} key={row.userId}>
-              <span className="podiumPosition">{row.position}º lugar</span>
+              <span className="podiumPosition">{formatMessage(copy.ranking.place, { position: row.position })}</span>
               <h2>{row.name}</h2>
               <strong>{row.points} pts</strong>
-              <p>{row.exactHits} exatos · {row.outcomeHits} resultados · {row.predictions} palpites</p>
+              <p>{row.exactHits} {copy.ranking.exact} · {row.outcomeHits} {copy.ranking.outcomes} · {row.predictions} {copy.ranking.predictions}</p>
             </article>
           ))}
         </section>
@@ -147,20 +151,20 @@ export default async function RankingPage({ searchParams }: { searchParams?: Pro
       <div className="rankingCard">
         <div className="rankingHeader">
           <div>
-            <span className="badge badgeGold">Classificacao</span>
-            <h2>{poolName ? "Participantes do bolao" : "Participantes"}</h2>
+            <span className="badge badgeGold">{copy.ranking.classification}</span>
+            <h2>{poolName ? copy.ranking.poolParticipants : copy.ranking.participants}</h2>
           </div>
-          <span className="muted">{rankingRows.length} jogador(es)</span>
+          <span className="muted">{formatMessage(copy.ranking.playersCount, { count: rankingRows.length })}</span>
         </div>
 
         {rankingRows.length > 0 ? (
-          <RankingDetails rows={rankingRows} />
+          <RankingDetails locale={locale} rows={rankingRows} />
         ) : (
-          <p className="emptyRanking muted">O ranking aparecera apos o primeiro palpite.</p>
+          <p className="emptyRanking muted">{copy.ranking.empty}</p>
         )}
 
         <div className="rankingRules">
-          <strong>Desempate:</strong> pontos, placares exatos, resultados corretos, palpites enviados e nome.
+          <strong>{copy.ranking.tiebreaker}</strong> {copy.ranking.tiebreakerText}
         </div>
       </div>
     </main>

@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { auth } from "../../auth";
 import { CupHeader } from "../../components/CupHeader";
+import { getCurrentLocale } from "../../lib/i18n";
+import { formatMessage, t } from "../../lib/i18n-shared";
 import { prisma } from "../../lib/prisma";
 import { saveProfile } from "./actions";
 
@@ -78,6 +80,8 @@ export default async function PerfilPage() {
   const email = session?.user?.email;
   if (!email) redirect("/");
 
+  const locale = await getCurrentLocale();
+  const copy = t(locale);
   const user = await getUserProfileData(email);
   const name = displayName(user);
   const initial = name.slice(0, 1).toUpperCase();
@@ -87,26 +91,26 @@ export default async function PerfilPage() {
 
   return (
     <main className="container bolaoPage">
-      <CupHeader active="perfil" title="Meu perfil" description="Ajuste seu apelido publico e acompanhe seu desempenho rodada por rodada." />
+      <CupHeader active="perfil" title={copy.profile.title} description={copy.profile.description} />
 
       <section className="profileGrid">
         <article className="profileCard">
           <div className="profilePreview">
             <span className="profileAvatar" style={{ backgroundColor: avatarColor }}>{initial}</span>
             <div>
-              <span className="badge badgeGold">Perfil publico</span>
+              <span className="badge badgeGold">{copy.profile.publicProfile}</span>
               <h2>{name}</h2>
-              <p className="muted">{totalPoints} pontos acumulados em {user.predictions.length} palpite(s).</p>
+              <p className="muted">{formatMessage(copy.profile.accumulated, { points: totalPoints, predictions: user.predictions.length })}</p>
             </div>
           </div>
 
           <form action={saveProfile} className="profileForm">
             <label>
-              <span>Apelido publico</span>
+              <span>{copy.profile.nickname}</span>
               <input defaultValue={user.nickname ?? user.name ?? ""} maxLength={32} minLength={2} name="nickname" required type="text" />
             </label>
             <fieldset>
-              <legend>Cor do avatar</legend>
+              <legend>{copy.profile.avatarColor}</legend>
               <div className="avatarColorGrid">
                 {avatarColors.map((color) => (
                   <label key={color}>
@@ -116,25 +120,25 @@ export default async function PerfilPage() {
                 ))}
               </div>
             </fieldset>
-            <button type="submit">Salvar perfil</button>
+            <button type="submit">{copy.profile.save}</button>
           </form>
         </article>
 
         <article className="profileCard">
-          <span className="badge">Historico</span>
-          <h2>Desempenho por rodada</h2>
+          <span className="badge">{copy.profile.history}</span>
+          <h2>{copy.profile.performance}</h2>
           {roundHistory.length > 0 ? (
             <div className="roundHistory">
               {roundHistory.map((round) => (
                 <div className="roundHistoryItem" key={round.round}>
-                  <strong>{round.round}ª rodada</strong>
+                  <strong>{formatMessage(copy.profile.round, { round: round.round })}</strong>
                   <span>{round.points} pts</span>
-                  <small>{round.exactHits} exatos · {round.outcomeHits} resultados · {round.resolved}/{round.predictions} finalizados</small>
+                  <small>{round.exactHits} {copy.ranking.exact} · {round.outcomeHits} {copy.ranking.outcomes} · {formatMessage(copy.profile.finished, { resolved: round.resolved, predictions: round.predictions })}</small>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="muted">Seu historico aparece depois do primeiro palpite.</p>
+            <p className="muted">{copy.profile.emptyHistory}</p>
           )}
         </article>
       </section>

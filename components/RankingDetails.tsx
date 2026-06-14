@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import type { AppLocale } from "../lib/i18n-shared";
+import { t } from "../lib/i18n-shared";
+import { getTeamDisplayName } from "../lib/teams";
 
 export type RankingHit = {
   matchId: string;
@@ -24,7 +27,8 @@ export type RankingRow = {
   hits: RankingHit[];
 };
 
-export function RankingDetails({ rows }: { rows: RankingRow[] }) {
+export function RankingDetails({ locale = "pt-BR", rows }: { locale?: AppLocale; rows: RankingRow[] }) {
+  const copy = t(locale);
   const [openUserId, setOpenUserId] = useState<string | null>(null);
 
   return (
@@ -39,28 +43,28 @@ export function RankingDetails({ rows }: { rows: RankingRow[] }) {
               onClick={() => setOpenUserId(isOpen ? null : row.userId)}
               type="button"
             >
-              <span className="rankingPosition">{row.position}º</span>
+              <span className="rankingPosition">{row.position}</span>
               <span className="rankingParticipant">{row.name}</span>
               <span><strong>{row.points}</strong><small>pts</small></span>
-              <span><strong>{row.exactHits}</strong><small>exatos</small></span>
-              <span><strong>{row.outcomeHits}</strong><small>resultados</small></span>
-              <span><strong>{row.predictions}</strong><small>palpites</small></span>
-              <span><strong>{row.accuracy}%</strong><small>aprov.</small></span>
+              <span><strong>{row.exactHits}</strong><small>{copy.ranking.exact}</small></span>
+              <span><strong>{row.outcomeHits}</strong><small>{copy.ranking.outcomes}</small></span>
+              <span><strong>{row.predictions}</strong><small>{copy.ranking.predictions}</small></span>
+              <span><strong>{row.accuracy}%</strong><small>{copy.ranking.accuracy}</small></span>
             </button>
 
             {isOpen && (
               <div className="rankingHitList">
                 {row.hits.length === 0 ? (
-                  <p className="muted">Nenhum jogo pontuado ainda. Quando houver resultados cadastrados, os acertos aparecem aqui.</p>
+                  <p className="muted">{copy.ranking.noHits}</p>
                 ) : (
                   row.hits.map((hit) => (
                     <div className="rankingHit" key={`${row.userId}-${hit.matchId}`}>
                       <span className={`hitBadge ${hit.kind === "exact" ? "hitBadgeExact" : ""}`}>
-                        {hit.kind === "exact" ? "Placar exato" : "Resultado"}
+                        {hit.kind === "exact" ? copy.ranking.exactScore : copy.ranking.result}
                       </span>
-                      <span>{hit.teamA} x {hit.teamB}</span>
-                      <span className="muted">Palpite {hit.prediction}</span>
-                      <span className="muted">Resultado {hit.result}</span>
+                      <span>{getTeamDisplayName(hit.teamA, locale)} x {getTeamDisplayName(hit.teamB, locale)}</span>
+                      <span className="muted">{copy.ranking.prediction} {hit.prediction}</span>
+                      <span className="muted">{copy.ranking.result} {hit.result}</span>
                       <strong>+{hit.points}</strong>
                     </div>
                   ))

@@ -1,22 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { AppLocale } from "../lib/i18n-shared";
+import { formatMessage, t } from "../lib/i18n-shared";
 import type { NewsItem } from "../lib/news";
 
 type DateFilter = "all" | "today" | "7d" | "30d";
 type ViewMode = "cards" | "list";
 
-const newsDateFormatter = new Intl.DateTimeFormat("pt-BR", {
-  day: "2-digit",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "America/Sao_Paulo",
-});
-
-function formatNewsDate(value: string | null) {
-  if (!value) return "Data indisponível";
-  return newsDateFormatter.format(new Date(value));
+function formatNewsDate(value: string | null, locale: AppLocale, unavailableLabel: string) {
+  if (!value) return unavailableLabel;
+  return new Intl.DateTimeFormat(locale, {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Sao_Paulo",
+  }).format(new Date(value));
 }
 
 function matchesDateFilter(value: string | null, filter: DateFilter) {
@@ -32,7 +32,8 @@ function matchesDateFilter(value: string | null, filter: DateFilter) {
   return now - publishedAt <= 30 * dayMs;
 }
 
-export function NewsFilters({ news }: { news: NewsItem[] }) {
+export function NewsFilters({ locale = "pt-BR", news }: { locale?: AppLocale; news: NewsItem[] }) {
+  const copy = t(locale);
   const [source, setSource] = useState("all");
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
   const [query, setQuery] = useState("");
@@ -66,69 +67,69 @@ export function NewsFilters({ news }: { news: NewsItem[] }) {
 
   return (
     <>
-      <section className="newsFilters card" aria-label="Filtros de notícias">
+      <section className="newsFilters card" aria-label={copy.news.filtersAria}>
         <label>
-          <span>Fonte</span>
+          <span>{copy.news.source}</span>
           <select onChange={(event) => setSource(event.target.value)} value={source}>
-            <option value="all">Todas</option>
+            <option value="all">{copy.news.allSources}</option>
             {sources.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
         </label>
 
         <label>
-          <span>Data</span>
+          <span>{copy.news.date}</span>
           <select onChange={(event) => setDateFilter(event.target.value as DateFilter)} value={dateFilter}>
-            <option value="all">Qualquer data</option>
-            <option value="today">Últimas 24h</option>
-            <option value="7d">Últimos 7 dias</option>
-            <option value="30d">Últimos 30 dias</option>
+            <option value="all">{copy.news.anyDate}</option>
+            <option value="today">{copy.news.last24h}</option>
+            <option value="7d">{copy.news.last7d}</option>
+            <option value="30d">{copy.news.last30d}</option>
           </select>
         </label>
 
         <label className="newsSearch">
-          <span>Buscar</span>
+          <span>{copy.news.search}</span>
           <input
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Ex.: Brasil, grupos, convocação"
+            placeholder={copy.news.searchPlaceholder}
             type="search"
             value={query}
           />
         </label>
 
         <button className="buttonSecondary" onClick={() => { setSource("all"); setDateFilter("all"); setQuery(""); }} type="button">
-          Limpar filtros
+          {copy.news.clearFilters}
         </button>
       </section>
 
       <div className="newsResultBar">
         <div className="newsResultCount">
-          <strong>{filteredNews.length}</strong> notícia(s) encontrada(s)
+          {formatMessage(copy.news.found, { count: filteredNews.length })}
         </div>
 
-        <div className="newsViewToggle" aria-label="Formato de visualização">
+        <div className="newsViewToggle" aria-label={copy.news.viewAria}>
           <button aria-pressed={viewMode === "cards"} onClick={() => changeViewMode("cards")} type="button">
-            Cards
+            {copy.news.cards}
           </button>
           <button aria-pressed={viewMode === "list"} onClick={() => changeViewMode("list")} type="button">
-            Lista
+            {copy.news.list}
           </button>
         </div>
       </div>
 
       {filteredNews.length === 0 ? (
-        <div className="notice">Nenhuma notícia encontrada com esses filtros.</div>
+        <div className="notice">{copy.news.empty}</div>
       ) : (
         <section className={viewMode === "cards" ? "newsGrid" : "newsList"}>
           {filteredNews.map((item) => (
             <article className={viewMode === "cards" ? "newsCard" : "newsCard newsCardList"} key={`${item.source}-${item.link}`}>
               <div className="newsMeta">
                 <span className="badge">{item.source}</span>
-                <span>{formatNewsDate(item.publishedAt)}</span>
+                <span>{formatNewsDate(item.publishedAt, locale, copy.news.unavailableDate)}</span>
               </div>
               <h2>{item.title}</h2>
               {item.description && <p>{item.description}</p>}
               <a className="buttonLink" href={item.link} rel="noreferrer" target="_blank">
-                Ler notícia
+                {copy.news.read}
               </a>
             </article>
           ))}
