@@ -10,6 +10,7 @@ import { MAX_GOALS } from "../../lib/prediction";
 import { prisma } from "../../lib/prisma";
 import { assertRateLimit } from "../../lib/rate-limit";
 import { setMatchResult } from "../../lib/results";
+import { readPositiveInt, syncPendingSerpApiResults } from "../../lib/result-sync";
 
 const ResultSchema = z.object({
   matchId: z.string().cuid(),
@@ -38,6 +39,7 @@ const MatchLiveUrlSchema = z.object({
 });
 
 const adminActionRateLimitWindowMs = 60 * 1000;
+const adminSyncRateLimitWindowMs = 5 * 60 * 1000;
 
 async function assertAdminAction(adminEmail: string | null, action: string) {
   await assertRateLimit(`admin:any:${adminEmail ?? "anonymous"}`, 20, adminActionRateLimitWindowMs);
@@ -99,6 +101,42 @@ export async function saveMatchResult(formData: FormData) {
   revalidatePath("/bolao");
   revalidatePath("/simulador");
   revalidatePath(`/tempo-real/${result.data.matchId}`);
+}
+
+export async function syncPendingResultsNow() {
+  const session = await auth();
+  const adminEmail = session?.user?.email ?? null;
+  await assertAdminAction(adminEmail, "admin_serpapi_sync");
+  await assertRateLimit(`admin:serpapi-sync:${adminEmail}`, 3, adminSyncRateLimitWindowMs);
+
+  const summary = await syncPendingSerpApiResults({
+    debug: process.env.SERPAPI_DEBUG === "true",
+    delayMinutes: readPositiveInt("SERPAPI_RESULT_DELAY_MINUTES", 120),
+    maxMatches: readPositiveInt("SERPAPI_RESULT_MAX_MATCHES", 12),
+    prisma,
+    triggeredBy: adminEmail,
+  });
+
+  await createAuditLog(prisma, {
+    actorEmail: adminEmail,
+    action: "admin_serpapi_sync_triggered",
+    entity: "result_sync_run",
+    entityId: summary.runId,
+    metadata: summary,
+  });
+
+  logger.info("admin_serpapi_sync_triggered", {
+    adminEmailDomain: adminEmail?.split("@")[1]?.toLowerCase() ?? null,
+    candidates: summary.candidates,
+    imported: summary.imported,
+    skipped: summary.skipped,
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/ranking");
+  revalidatePath("/bolao");
+  revalidatePath("/simulador");
+  revalidatePath("/resultados");
 }
 
 export async function saveMatchStatus(formData: FormData) {

@@ -192,6 +192,13 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .resultsSummary article { display: grid; gap: 8px; padding: 20px; }
 .resultsSummary strong { color: #116530; font-size: clamp(1.8rem, 4vw, 2.6rem); line-height: 1; }
 .resultsSummary p { margin-bottom: 0; }
+.resultsInsights { display: grid; grid-template-columns: minmax(220px, .8fr) minmax(0, 1.6fr); gap: 18px; align-items: stretch; margin-bottom: 18px; padding: 20px; }
+.resultsInsights h2 { margin: 10px 0 8px; }
+.resultsInsightsGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.resultsInsightsGrid article { display: grid; gap: 8px; min-width: 0; padding: 14px; border: 1px solid #e3ece6; border-radius: 16px; background: linear-gradient(135deg, #fbfdfb 0%, #f2fff6 100%); }
+.resultsInsightsGrid span { color: #617068; font-size: .76rem; font-weight: 900; text-transform: uppercase; }
+.resultsInsightsGrid strong { color: #0b3d26; font-size: 1.02rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.resultsInsightsGrid small { color: #617068; font-weight: 800; }
 .resultsFilters { display: grid; grid-template-columns: minmax(160px, .8fr) minmax(190px, .9fr) auto auto; gap: 12px; align-items: end; margin-bottom: 16px; }
 .resultsFilters label { display: grid; gap: 7px; color: #617068; font-size: .82rem; font-weight: 900; text-transform: uppercase; }
 .resultsFilters select { width: 100%; }
@@ -298,6 +305,8 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .adminSyncHeader { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
 .adminSyncHeader h2 { margin: 8px 0 6px; font-size: clamp(1.35rem, 3vw, 2rem); }
 .adminSyncHeader p { max-width: 720px; margin-bottom: 0; color: #617068; font-weight: 800; }
+.adminSyncAction { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
+.adminSyncAction span { color: #617068; font-size: .84rem; font-weight: 800; }
 .adminSyncStatus { display: grid; gap: 4px; min-width: 180px; padding: 12px; border: 1px solid #dce5df; border-radius: 14px; background: #f8fbf9; text-align: right; }
 .adminSyncStatus span, .adminSyncStatus time { color: #617068; font-size: .82rem; font-weight: 800; }
 .adminSyncStatus strong { color: #116530; font-size: 1.05rem; }
@@ -308,12 +317,22 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .adminSyncMetrics { display: flex; flex-wrap: wrap; gap: 8px; }
 .adminSyncMetrics span { padding: 8px 11px; border-radius: 999px; background: #effaf1; color: #116530; font-size: .86rem; font-weight: 900; }
 .adminSyncError { margin: 0; padding: 10px 12px; border: 1px solid #fecaca; border-radius: 12px; background: #fff1f2; color: #9a3412; font-weight: 800; }
+.adminSyncWarning { margin: 0; padding: 10px 12px; border: 1px solid #f1cf5a; border-radius: 12px; background: #fff8df; color: #8a5b12; font-weight: 800; }
+.adminSyncAlerts { display: grid; gap: 8px; }
+.adminSyncAlerts h3 { margin: 0; color: #617068; font-size: .9rem; letter-spacing: .06em; text-transform: uppercase; }
 .adminSyncRuns { display: grid; gap: 8px; }
 .adminSyncRuns h3 { margin: 0; color: #617068; font-size: .9rem; letter-spacing: .06em; text-transform: uppercase; }
 .adminSyncRun { display: flex; justify-content: space-between; gap: 12px; padding: 11px 12px; border: 1px solid #e7eee9; border-radius: 14px; background: #f8fbf9; }
 .adminSyncRun div { display: grid; gap: 3px; }
 .adminSyncRun strong { color: #142019; }
 .adminSyncRun span { color: #617068; font-size: .82rem; font-weight: 800; }
+.adminOpsCalendar { display: grid; gap: 16px; margin-bottom: 18px; padding: 18px; border: 1px solid #dce5df; border-radius: 18px; background: white; box-shadow: 0 10px 26px rgb(20 32 25 / 7%); }
+.adminOpsCalendarHeader h2 { margin: 8px 0 6px; font-size: clamp(1.35rem, 3vw, 2rem); }
+.adminOpsCalendarHeader p { max-width: 760px; margin-bottom: 0; color: #617068; font-weight: 800; }
+.adminOpsList { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.adminOpsItem { display: grid; gap: 6px; padding: 12px; border: 1px solid #e7eee9; border-radius: 14px; background: #f8fbf9; }
+.adminOpsItem strong { color: #142019; }
+.adminOpsItem span { color: #617068; font-size: .82rem; font-weight: 800; }
 .simulatorHero { max-width: none; margin-bottom: 18px; }
 .simulatorShell { display: grid; gap: 18px; }
 .simulatorGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 18px; }
@@ -329,7 +348,10 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .simulatorMatches { display: grid; gap: 10px; }
 .simulatorMatches:last-child { margin-bottom: 0; }
 .roundPager { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; margin: 18px -20px 0; padding: 8px 12px; border-top: 1px solid #dce5df; border-bottom: 1px solid #dce5df; text-align: center; }
-.roundArrow { background: transparent; color: #116530; font-size: 2rem; line-height: 1; padding: 0; }
+.roundArrow { background: transparent; color: #116530; font-size: 0; line-height: 1; padding: 0; }
+.roundArrow::before { font-size: 2rem; }
+.roundPager .roundArrow:first-child::before { content: "<"; }
+.roundPager .roundArrow:last-child::before { content: ">"; }
 .roundArrow:disabled { color: #c8d2cc; opacity: 1; }
 .simulatorMatch { display: grid; grid-template-columns: minmax(86px, 1fr) 54px auto 54px minmax(86px, 1fr) minmax(112px, auto); gap: 8px; align-items: center; padding: 10px 0; border-bottom: 1px solid #dce5df; }
 .matchMeta { grid-column: 1 / -1; display: grid; grid-template-columns: 38px 92px minmax(90px, 1fr) 48px; gap: 8px; align-items: center; color: #8a938e; font-size: .85rem; text-transform: uppercase; }
@@ -455,6 +477,8 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
   .profileGrid { grid-template-columns: 1fr; }
   .profilePreview { align-items: flex-start; flex-direction: column; }
   .resultsSummary { grid-template-columns: 1fr; }
+  .resultsInsights { grid-template-columns: 1fr; }
+  .resultsInsightsGrid { grid-template-columns: 1fr; }
   .resultsFilters { grid-template-columns: 1fr; }
   .resultCardHeader { flex-direction: column; }
   .resultStatusStack { justify-items: start; }

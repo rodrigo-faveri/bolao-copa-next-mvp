@@ -133,6 +133,14 @@ function getResultFilter(prediction: { goalsA: number; goalsB: number; points: n
   return "miss";
 }
 
+function scorerName(user: { nickname: string | null; name: string | null; email: string | null }) {
+  return user.nickname || user.name || user.email?.split("@")[0] || t("pt-BR").common.system;
+}
+
+function uniqueTopNames(names: string[], limit = 5) {
+  return Array.from(new Set(names)).slice(0, limit);
+}
+
 export default async function ResultadosPage() {
   const session = await auth();
   const email = session?.user?.email;
@@ -153,9 +161,13 @@ export default async function ResultadosPage() {
     },
     include: {
       predictions: {
-        where: { userId: user.id },
-        select: { goalsA: true, goalsB: true, points: true },
-        take: 1,
+        select: {
+          goalsA: true,
+          goalsB: true,
+          points: true,
+          userId: true,
+          user: { select: { nickname: true, name: true, email: true } },
+        },
       },
     },
     orderBy: [{ startsAt: "asc" }, { group: "asc" }],
@@ -163,15 +175,35 @@ export default async function ResultadosPage() {
 
   const resolvedMatches = matches.filter((match) => match.resultGoalsA !== null && match.resultGoalsB !== null);
   const waitingMatches = matches.filter((match) => match.resultGoalsA === null || match.resultGoalsB === null);
-  const totalPoints = resolvedMatches.reduce((sum, match) => sum + (match.predictions[0]?.points ?? 0), 0);
+  const totalPoints = resolvedMatches.reduce((sum, match) => sum + (match.predictions.find((prediction) => prediction.userId === user.id)?.points ?? 0), 0);
   const exactHits = resolvedMatches.filter((match) => {
-    const prediction = match.predictions[0];
+    const prediction = match.predictions.find((item) => item.userId === user.id);
     return prediction && prediction.goalsA === match.resultGoalsA && prediction.goalsB === match.resultGoalsB;
   }).length;
-  const outcomeHits = resolvedMatches.filter((match) => match.predictions[0]?.points === 3).length;
-  const predictionsCount = matches.filter((match) => Boolean(match.predictions[0])).length;
+  const outcomeHits = resolvedMatches.filter((match) => match.predictions.find((prediction) => prediction.userId === user.id)?.points === 3).length;
+  const predictionsCount = matches.filter((match) => match.predictions.some((prediction) => prediction.userId === user.id)).length;
+  const allResolvedPredictions = resolvedMatches.flatMap((match) => match.predictions);
+  const averagePoints = allResolvedPredictions.length > 0
+    ? (allResolvedPredictions.reduce((sum, prediction) => sum + prediction.points, 0) / allResolvedPredictions.length).toFixed(1)
+    : "0.0";
+  const exactScorers = uniqueTopNames(allResolvedPredictions.filter((prediction) => prediction.points === 5).map((prediction) => scorerName(prediction.user)));
+  const outcomeScorers = uniqueTopNames(allResolvedPredictions.filter((prediction) => prediction.points === 3).map((prediction) => scorerName(prediction.user)));
+  const hardestMatch = resolvedMatches.reduce<null | { label: string; hitRate: number; predictions: number }>((hardest, match) => {
+    const predictions = match.predictions.length;
+    if (predictions === 0) return hardest;
+
+    const hits = match.predictions.filter((prediction) => prediction.points > 0).length;
+    const hitRate = hits / predictions;
+    const label = `${getTeamDisplayName(match.teamA, locale)} x ${getTeamDisplayName(match.teamB, locale)}`;
+
+    if (!hardest || hitRate < hardest.hitRate || (hitRate === hardest.hitRate && predictions > hardest.predictions)) {
+      return { label, hitRate, predictions };
+    }
+
+    return hardest;
+  }, null);
   const resultItems: ResultItem[] = matches.map((match) => {
-    const prediction = match.predictions[0] ?? null;
+    const prediction = match.predictions.find((item) => item.userId === user.id) ?? null;
     const resultA = match.resultGoalsA;
     const resultB = match.resultGoalsB;
     const hasOfficialResult = resultA !== null && resultB !== null;
@@ -235,6 +267,11 @@ export default async function ResultadosPage() {
             resolvedMatches: resolvedMatches.length,
             waitingMatches: waitingMatches.length,
             predictionsCount,
+            averagePoints,
+            exactScorers,
+            outcomeScorers,
+            hardestMatch: hardestMatch?.label ?? copy.results.noFinishedStats,
+            hardestMatchHitRate: hardestMatch ? formatMessage(copy.results.hitRate, { rate: Math.round(hardestMatch.hitRate * 100) }) : copy.results.noFinishedStats,
           }}
         />
       )}

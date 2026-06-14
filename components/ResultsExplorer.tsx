@@ -34,6 +34,11 @@ export type ResultsSummary = {
   resolvedMatches: number;
   waitingMatches: number;
   predictionsCount: number;
+  averagePoints: string;
+  exactScorers: string[];
+  outcomeScorers: string[];
+  hardestMatch: string;
+  hardestMatchHitRate: string;
 };
 
 function flagFor(team: string) {
@@ -110,6 +115,33 @@ export function ResultsExplorer({ items, locale = "pt-BR", summary }: { items: R
           <strong>{summary.predictionsCount}</strong>
           <p className="muted">{copy.results.trackedPredictions}</p>
         </article>
+      </section>
+
+      <section className="resultsInsights card">
+        <div>
+          <span className="badge badgeGold">{copy.results.postGameSummary}</span>
+          <h2>{copy.results.postGameTitle}</h2>
+          <p className="muted">{copy.results.postGameDescription}</p>
+        </div>
+        <div className="resultsInsightsGrid">
+          <article>
+            <span>{copy.results.averagePoints}</span>
+            <strong>{summary.averagePoints}</strong>
+          </article>
+          <article>
+            <span>{copy.results.exactScorers}</span>
+            <strong>{summary.exactScorers.length > 0 ? summary.exactScorers.join(", ") : copy.results.noScorersYet}</strong>
+          </article>
+          <article>
+            <span>{copy.results.outcomeScorers}</span>
+            <strong>{summary.outcomeScorers.length > 0 ? summary.outcomeScorers.join(", ") : copy.results.noScorersYet}</strong>
+          </article>
+          <article>
+            <span>{copy.results.hardestMatch}</span>
+            <strong>{summary.hardestMatch}</strong>
+            <small>{summary.hardestMatchHitRate}</small>
+          </article>
+        </div>
       </section>
 
       <section className="resultsFilters card" aria-label={copy.results.filtersAria}>

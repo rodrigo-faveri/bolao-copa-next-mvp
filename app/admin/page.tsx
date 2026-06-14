@@ -4,11 +4,12 @@ import { CupHeader } from "../../components/CupHeader";
 import { isAdminEmail } from "../../lib/access-control";
 import { getCurrentLocale } from "../../lib/i18n";
 import { formatMessage, t, type AppLocale } from "../../lib/i18n-shared";
-import { MAX_GOALS } from "../../lib/prediction";
+import { MAX_GOALS, PREDICTION_CLOSE_MINUTES } from "../../lib/prediction";
 import { prisma } from "../../lib/prisma";
+import { readPositiveInt } from "../../lib/result-sync";
 import { getTeamDisplayName } from "../../lib/teams";
 import { getMatchVenue } from "../../lib/venues";
-import { saveMatchEvent, saveMatchLiveUrl, saveMatchResult, saveMatchStatus } from "./actions";
+import { saveMatchEvent, saveMatchLiveUrl, saveMatchResult, saveMatchStatus, syncPendingResultsNow } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,10 @@ const timeFormatter = new Intl.DateTimeFormat("pt-BR", {
 function formatMatchDate(startsAt: Date | null, locale: AppLocale) {
   if (!startsAt) return t(locale).common.noDate;
   return `${dateFormatter.format(startsAt)} as ${timeFormatter.format(startsAt)}`;
+}
+
+function formatDateTime(date: Date, locale: AppLocale) {
+  return `${dateFormatter.format(date)} ${timeFormatter.format(date)} ${locale === "en-US" ? "BRT" : "BRT"}`;
 }
 
 function formatMatchStatus(status: string, hasResult: boolean, locale: AppLocale) {
@@ -118,6 +123,20 @@ export default async function AdminPage() {
 
   const finishedCount = matches.filter((match) => match.finishedAt).length;
   const latestSyncRun = syncRuns[0] ?? null;
+  const now = new Date();
+  const syncDelayMinutes = readPositiveInt("SERPAPI_RESULT_DELAY_MINUTES", 120);
+  const staleSyncMinutes = readPositiveInt("SERPAPI_STALE_ALERT_MINUTES", syncDelayMinutes + 60);
+  const staleCutoff = new Date(now.getTime() - staleSyncMinutes * 60 * 1000);
+  const stalePendingMatches = matches.filter((match) =>
+    match.startsAt
+    && match.startsAt <= staleCutoff
+    && match.resultGoalsA === null
+    && match.resultGoalsB === null
+  );
+  const operationalMatches = matches
+    .filter((match) => match.startsAt && match.resultGoalsA === null && match.resultGoalsB === null)
+    .sort((a, b) => (a.startsAt?.getTime() ?? 0) - (b.startsAt?.getTime() ?? 0))
+    .slice(0, 8);
 
   return (
     <main className="container bolaoPage">
@@ -145,6 +164,10 @@ export default async function AdminPage() {
             <span className="badge badgeGold">{copy.admin.syncBadge}</span>
             <h2>{copy.admin.syncTitle}</h2>
             <p>{copy.admin.syncDescription}</p>
+            <form action={syncPendingResultsNow} className="adminSyncAction">
+              <button type="submit">{copy.admin.syncNow}</button>
+              <span>{copy.admin.syncNowHint}</span>
+            </form>
           </div>
           {latestSyncRun ? (
             <div className={`adminSyncStatus adminSyncStatus${latestSyncRun.status === "failed" ? "Failed" : latestSyncRun.status === "running" ? "Running" : "Success"}`}>
@@ -169,6 +192,13 @@ export default async function AdminPage() {
           <p className="adminSyncError"><strong>{copy.admin.syncError}:</strong> {latestSyncRun.errorMessage}</p>
         )}
 
+        <div className="adminSyncAlerts">
+          <h3>{copy.admin.syncAlertsTitle}</h3>
+          {latestSyncRun?.status === "failed" && <p className="adminSyncError">{copy.admin.syncFailedAlert}</p>}
+          {stalePendingMatches.length > 0 && <p className="adminSyncWarning">{formatMessage(copy.admin.syncStaleAlert, { count: stalePendingMatches.length })}</p>}
+          {latestSyncRun?.status !== "failed" && stalePendingMatches.length === 0 && <p className="muted">{copy.admin.syncNoAlerts}</p>}
+        </div>
+
         {syncRuns.length > 0 && (
           <div className="adminSyncRuns">
             <h3>{copy.admin.syncRecentRuns}</h3>
@@ -186,6 +216,29 @@ export default async function AdminPage() {
             ))}
           </div>
         )}
+      </section>
+
+      <section className="adminOpsCalendar">
+        <div className="adminOpsCalendarHeader">
+          <span className="badge badgeGold">{copy.admin.opsCalendar}</span>
+          <h2>{copy.admin.opsCalendar}</h2>
+          <p>{copy.admin.opsCalendarDescription}</p>
+        </div>
+        <div className="adminOpsList">
+          {operationalMatches.map((match) => {
+            const startsAt = match.startsAt as Date;
+            const pickClosesAt = new Date(startsAt.getTime() - PREDICTION_CLOSE_MINUTES * 60 * 1000);
+            const syncAt = new Date(startsAt.getTime() + syncDelayMinutes * 60 * 1000);
+            return (
+              <article className="adminOpsItem" key={match.id}>
+                <strong>{getTeamDisplayName(match.teamA, locale)} x {getTeamDisplayName(match.teamB, locale)}</strong>
+                <span>{copy.admin.opsMatchStarts}: {formatDateTime(startsAt, locale)}</span>
+                <span>{copy.admin.opsPicksClose}: {formatDateTime(pickClosesAt, locale)}</span>
+                <span>{copy.admin.opsSyncAt}: {formatDateTime(syncAt, locale)}</span>
+              </article>
+            );
+          })}
+        </div>
       </section>
 
       <section className="adminActivityCard">
