@@ -294,6 +294,26 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .timelineItem > span { display: grid; place-items: center; min-height: 42px; border-radius: 12px; background: white; color: #116530; font-weight: 900; }
 .timelineItem strong { display: block; margin-bottom: 4px; color: #142019; }
 .timelineItem p { margin-bottom: 0; color: #617068; }
+.adminSyncCard { display: grid; gap: 16px; margin-bottom: 18px; padding: 18px; border: 1px solid #dce5df; border-radius: 18px; background: white; box-shadow: 0 10px 26px rgb(20 32 25 / 7%); }
+.adminSyncHeader { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.adminSyncHeader h2 { margin: 8px 0 6px; font-size: clamp(1.35rem, 3vw, 2rem); }
+.adminSyncHeader p { max-width: 720px; margin-bottom: 0; color: #617068; font-weight: 800; }
+.adminSyncStatus { display: grid; gap: 4px; min-width: 180px; padding: 12px; border: 1px solid #dce5df; border-radius: 14px; background: #f8fbf9; text-align: right; }
+.adminSyncStatus span, .adminSyncStatus time { color: #617068; font-size: .82rem; font-weight: 800; }
+.adminSyncStatus strong { color: #116530; font-size: 1.05rem; }
+.adminSyncStatusFailed { border-color: #fecaca; background: #fff1f2; }
+.adminSyncStatusFailed strong { color: #9a3412; }
+.adminSyncStatusRunning { border-color: #f1cf5a; background: #fff8df; }
+.adminSyncStatusRunning strong { color: #8a5b12; }
+.adminSyncMetrics { display: flex; flex-wrap: wrap; gap: 8px; }
+.adminSyncMetrics span { padding: 8px 11px; border-radius: 999px; background: #effaf1; color: #116530; font-size: .86rem; font-weight: 900; }
+.adminSyncError { margin: 0; padding: 10px 12px; border: 1px solid #fecaca; border-radius: 12px; background: #fff1f2; color: #9a3412; font-weight: 800; }
+.adminSyncRuns { display: grid; gap: 8px; }
+.adminSyncRuns h3 { margin: 0; color: #617068; font-size: .9rem; letter-spacing: .06em; text-transform: uppercase; }
+.adminSyncRun { display: flex; justify-content: space-between; gap: 12px; padding: 11px 12px; border: 1px solid #e7eee9; border-radius: 14px; background: #f8fbf9; }
+.adminSyncRun div { display: grid; gap: 3px; }
+.adminSyncRun strong { color: #142019; }
+.adminSyncRun span { color: #617068; font-size: .82rem; font-weight: 800; }
 .simulatorHero { max-width: none; margin-bottom: 18px; }
 .simulatorShell { display: grid; gap: 18px; }
 .simulatorGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 18px; }
@@ -422,6 +442,9 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
   .poolContextActions { justify-content: flex-start; }
   .poolMemberItem { align-items: flex-start; flex-direction: column; }
   .adminActivityHeader { align-items: flex-start; flex-direction: column; }
+  .adminSyncHeader { align-items: flex-start; flex-direction: column; }
+  .adminSyncStatus { width: 100%; text-align: left; }
+  .adminSyncRun { flex-direction: column; }
   .adminActivityItem { grid-template-columns: 1fr; }
   .adminActivityItem time { white-space: normal; }
   .adminResultHeader { flex-direction: column; }

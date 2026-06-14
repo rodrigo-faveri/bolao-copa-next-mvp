@@ -37,6 +37,13 @@ function formatMatchStatus(status: string, hasResult: boolean, locale: AppLocale
   return copy.admin.scheduled;
 }
 
+function formatSyncStatus(status: string, locale: AppLocale) {
+  const copy = t(locale);
+  if (status === "running") return copy.admin.syncRunning;
+  if (status === "failed") return copy.admin.syncFailed;
+  return copy.admin.syncSuccess;
+}
+
 function maskEmail(email: string | null, locale: AppLocale) {
   if (!email) return t(locale).common.system;
   const [name, domain] = email.split("@");
@@ -75,6 +82,7 @@ function formatAuditAction(action: string, metadata: unknown, locale: AppLocale)
   if (action === "pool_invite_regenerated") return copy.admin.auditInviteRegenerated;
   if (action === "pool_member_removed") return copy.admin.auditMemberRemoved;
   if (action.endsWith("_denied")) return copy.admin.auditDenied;
+  if (action === "serpapi_result_imported") return "SerpAPI result imported";
 
   return action.replaceAll("_", " ");
 }
@@ -103,8 +111,13 @@ export default async function AdminPage() {
     orderBy: { createdAt: "desc" },
     take: 12,
   });
+  const syncRuns = await prisma.resultSyncRun.findMany({
+    orderBy: { startedAt: "desc" },
+    take: 5,
+  });
 
   const finishedCount = matches.filter((match) => match.finishedAt).length;
+  const latestSyncRun = syncRuns[0] ?? null;
 
   return (
     <main className="container bolaoPage">
@@ -124,6 +137,55 @@ export default async function AdminPage() {
           <span>{formatMessage(copy.admin.finishedCount, { count: finishedCount })}</span>
           <span>{formatMessage(copy.admin.matchesCount, { count: matches.length })}</span>
         </div>
+      </section>
+
+      <section className="adminSyncCard">
+        <div className="adminSyncHeader">
+          <div>
+            <span className="badge badgeGold">{copy.admin.syncBadge}</span>
+            <h2>{copy.admin.syncTitle}</h2>
+            <p>{copy.admin.syncDescription}</p>
+          </div>
+          {latestSyncRun ? (
+            <div className={`adminSyncStatus adminSyncStatus${latestSyncRun.status === "failed" ? "Failed" : latestSyncRun.status === "running" ? "Running" : "Success"}`}>
+              <span>{copy.admin.syncLastRun}</span>
+              <strong>{formatSyncStatus(latestSyncRun.status, locale)}</strong>
+              <time dateTime={latestSyncRun.startedAt.toISOString()}>{dateFormatter.format(latestSyncRun.startedAt)} {timeFormatter.format(latestSyncRun.startedAt)}</time>
+            </div>
+          ) : (
+            <p className="muted">{copy.admin.syncNoRuns}</p>
+          )}
+        </div>
+
+        {latestSyncRun && (
+          <div className="adminSyncMetrics">
+            <span>{formatMessage(copy.admin.syncImported, { count: latestSyncRun.imported })}</span>
+            <span>{formatMessage(copy.admin.syncSkipped, { count: latestSyncRun.skipped })}</span>
+            <span>{formatMessage(copy.admin.syncCandidates, { count: latestSyncRun.candidates })}</span>
+          </div>
+        )}
+
+        {latestSyncRun?.errorMessage && (
+          <p className="adminSyncError"><strong>{copy.admin.syncError}:</strong> {latestSyncRun.errorMessage}</p>
+        )}
+
+        {syncRuns.length > 0 && (
+          <div className="adminSyncRuns">
+            <h3>{copy.admin.syncRecentRuns}</h3>
+            {syncRuns.map((run) => (
+              <article className="adminSyncRun" key={run.id}>
+                <div>
+                  <strong>{formatSyncStatus(run.status, locale)}</strong>
+                  <span>{formatMessage(copy.admin.syncCandidates, { count: run.candidates })} - {formatMessage(copy.admin.syncImported, { count: run.imported })}</span>
+                </div>
+                <div>
+                  <span>{copy.admin.syncStartedAt}: {dateFormatter.format(run.startedAt)} {timeFormatter.format(run.startedAt)}</span>
+                  <span>{copy.admin.syncFinishedAt}: {run.finishedAt ? `${dateFormatter.format(run.finishedAt)} ${timeFormatter.format(run.finishedAt)}` : copy.common.loading}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="adminActivityCard">

@@ -91,22 +91,22 @@ const dateFormatter = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: 
 const timeFormatter = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Sao_Paulo" });
 
 const roundOf32Template = [
-  ["1E", "3º"],
-  ["1I", "3º"],
+  ["1E", "3Âº"],
+  ["1I", "3Âº"],
   ["2A", "2B"],
   ["1F", "2C"],
   ["2K", "2L"],
   ["1H", "2J"],
-  ["1D", "3º"],
-  ["1G", "3º"],
+  ["1D", "3Âº"],
+  ["1G", "3Âº"],
   ["1C", "2F"],
   ["2E", "2I"],
-  ["1A", "3º"],
-  ["1L", "3º"],
+  ["1A", "3Âº"],
+  ["1L", "3Âº"],
   ["1J", "2H"],
   ["2D", "2G"],
-  ["1B", "3º"],
-  ["1K", "3º"],
+  ["1B", "3Âº"],
+  ["1K", "3Âº"],
 ] as const;
 
 function flagFor(team: string) {
@@ -115,7 +115,6 @@ function flagFor(team: string) {
   // eslint-disable-next-line @next/next/no-img-element
   return <img className="teamFlag" src={flagUrl} alt={`Bandeira de ${getTeamDisplayName(team)}`} loading="lazy" />;
 }
-
 function teamLabel(team: string, locale: AppLocale = "pt-BR") {
   return getTeamDisplayName(team, locale);
 }
@@ -266,7 +265,7 @@ function buildRoundOf32(groups: SimulatorGroup[]): BracketRound {
   let thirdIndex = 0;
 
   const resolveSlot = (label: string): QualifiedSlot => {
-    if (label === "3º") {
+    if (label === "3Âº") {
       const team = bestThirds[thirdIndex]?.team;
       thirdIndex += 1;
       return { label, team };
@@ -625,9 +624,9 @@ export function WorldCupSimulator({
                 </div>
 
                 <div className="roundPager">
-                  <button aria-label={formatMessage(copy.simulator.previousRound, { group })} className="roundArrow" disabled={currentRound === 0} onClick={() => setRoundByGroup((current) => ({ ...current, [group]: currentRound - 1 }))} type="button">‹</button>
+                  <button aria-label={formatMessage(copy.simulator.previousRound, { group })} className="roundArrow" disabled={currentRound === 0} onClick={() => setRoundByGroup((current) => ({ ...current, [group]: currentRound - 1 }))} type="button">â€¹</button>
                   <strong>{formatMessage(copy.simulator.roundLabel, { round: currentRound + 1 })}</strong>
-                  <button aria-label={formatMessage(copy.simulator.nextRound, { group })} className="roundArrow" disabled={currentRound === rounds.length - 1} onClick={() => setRoundByGroup((current) => ({ ...current, [group]: currentRound + 1 }))} type="button">›</button>
+                  <button aria-label={formatMessage(copy.simulator.nextRound, { group })} className="roundArrow" disabled={currentRound === rounds.length - 1} onClick={() => setRoundByGroup((current) => ({ ...current, [group]: currentRound + 1 }))} type="button">â€º</button>
                 </div>
 
                 <div className="simulatorMatches">
@@ -767,7 +766,7 @@ export function WorldCupSimulator({
                 </div>
 
                 <div className="bracketCenter">
-                  <div className="trophyMark">Taça</div>
+                  <div className="trophyMark">TaÃ§a</div>
                   {finalRound.matches.map((match) => renderBracketMatch(match))}
                   <div className="championCard">
                     <span>{copy.simulator.champion}</span>
@@ -793,8 +792,3 @@ export function WorldCupSimulator({
     </div>
   );
 }
-
-
-
-
-

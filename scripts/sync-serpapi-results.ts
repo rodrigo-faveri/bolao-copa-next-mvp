@@ -21,6 +21,13 @@ async function main() {
     return;
   }
 
+  const syncRun = await prisma.resultSyncRun.create({
+    data: {
+      provider: "serpapi",
+      status: "running",
+    },
+  });
+
   const delayMinutes = readPositiveInt("SERPAPI_RESULT_DELAY_MINUTES", 120);
   const maxMatches = readPositiveInt("SERPAPI_RESULT_MAX_MATCHES", 12);
   const dryRun = hasFlag("--dry-run") || process.env.SERPAPI_DRY_RUN === "true";
@@ -40,87 +47,113 @@ async function main() {
   let imported = 0;
   let skipped = 0;
 
-  for (const match of matches) {
-    try {
-      const result = await fetchSerpApiMatchResult({
-        startsAt: match.startsAt,
-        teamA: match.teamA,
-        teamB: match.teamB,
-      });
+  try {
+    for (const match of matches) {
+      try {
+        const result = await fetchSerpApiMatchResult({
+          startsAt: match.startsAt,
+          teamA: match.teamA,
+          teamB: match.teamB,
+        });
 
-      if (!result) {
-        skipped += 1;
-        console.info(`Sem resultado final confiavel: ${match.teamA} x ${match.teamB}`);
-        if (debug) {
-          const debugResult = await fetchSerpApiMatchDebug({
-            startsAt: match.startsAt,
-            teamA: match.teamA,
-            teamB: match.teamB,
-          });
-          console.info(JSON.stringify(debugResult, null, 2));
+        if (!result) {
+          skipped += 1;
+          console.info(`Sem resultado final confiavel: ${match.teamA} x ${match.teamB}`);
+          if (debug) {
+            const debugResult = await fetchSerpApiMatchDebug({
+              startsAt: match.startsAt,
+              teamA: match.teamA,
+              teamB: match.teamB,
+            });
+            console.info(JSON.stringify(debugResult, null, 2));
+          }
+          continue;
         }
-        continue;
-      }
 
-      if (dryRun) {
-        console.info(`[dry-run] ${match.teamA} ${result.goalsA} x ${result.goalsB} ${match.teamB}`);
+        if (dryRun) {
+          console.info(`[dry-run] ${match.teamA} ${result.goalsA} x ${result.goalsB} ${match.teamB}`);
+          imported += 1;
+          continue;
+        }
+
+        const update = await prisma.$transaction(async (transaction) => {
+          const saved = await setMatchResult(transaction, {
+            allowFutureResult: true,
+            matchId: match.id,
+            goalsA: result.goalsA,
+            goalsB: result.goalsB,
+          });
+
+          await createAuditLog(transaction, {
+            action: "serpapi_result_imported",
+            entity: "match",
+            entityId: match.id,
+            metadata: {
+              goalsA: result.goalsA,
+              goalsB: result.goalsB,
+              sourceStatus: result.sourceStatus,
+              query: result.query,
+            },
+          });
+
+          for (const event of result.events) {
+            await transaction.matchEvent.create({
+              data: {
+                matchId: match.id,
+                minute: event.minute,
+                title: event.title,
+                description: event.description,
+              },
+            });
+          }
+
+          return saved;
+        });
+
         imported += 1;
-        continue;
-      }
-
-      const update = await prisma.$transaction(async (transaction) => {
-        const saved = await setMatchResult(transaction, {
-          allowFutureResult: true,
+        logger.info("serpapi_result_imported", {
           matchId: match.id,
           goalsA: result.goalsA,
           goalsB: result.goalsB,
+          predictionsUpdated: update.predictionsUpdated,
         });
-
-        await createAuditLog(transaction, {
-          action: "serpapi_result_imported",
-          entity: "match",
-          entityId: match.id,
-          metadata: {
-            goalsA: result.goalsA,
-            goalsB: result.goalsB,
-            sourceStatus: result.sourceStatus,
-            query: result.query,
-          },
+        console.info(`${match.teamA} ${result.goalsA} x ${result.goalsB} ${match.teamB} importado.`);
+      } catch (error) {
+        skipped += 1;
+        logger.warn("serpapi_result_import_failed", {
+          matchId: match.id,
+          message: error instanceof Error ? error.message : "unknown",
         });
-
-        for (const event of result.events) {
-          await transaction.matchEvent.create({
-            data: {
-              matchId: match.id,
-              minute: event.minute,
-              title: event.title,
-              description: event.description,
-            },
-          });
-        }
-
-        return saved;
-      });
-
-      imported += 1;
-      logger.info("serpapi_result_imported", {
-        matchId: match.id,
-        goalsA: result.goalsA,
-        goalsB: result.goalsB,
-        predictionsUpdated: update.predictionsUpdated,
-      });
-      console.info(`${match.teamA} ${result.goalsA} x ${result.goalsB} ${match.teamB} importado.`);
-    } catch (error) {
-      skipped += 1;
-      logger.warn("serpapi_result_import_failed", {
-        matchId: match.id,
-        message: error instanceof Error ? error.message : "unknown",
-      });
-      console.warn(`Falha ao importar ${match.teamA} x ${match.teamB}.`);
+        console.warn(`Falha ao importar ${match.teamA} x ${match.teamB}.`);
+      }
     }
-  }
 
-  console.info(`Sincronizacao concluida: ${imported} importado(s), ${skipped} ignorado(s), ${matches.length} candidato(s).`);
+    await prisma.resultSyncRun.update({
+      where: { id: syncRun.id },
+      data: {
+        candidates: matches.length,
+        finishedAt: new Date(),
+        imported,
+        skipped,
+        status: "success",
+      },
+    });
+
+    console.info(`Sincronizacao concluida: ${imported} importado(s), ${skipped} ignorado(s), ${matches.length} candidato(s).`);
+  } catch (error) {
+    await prisma.resultSyncRun.update({
+      where: { id: syncRun.id },
+      data: {
+        candidates: matches.length,
+        errorMessage: error instanceof Error ? error.message : "unknown",
+        finishedAt: new Date(),
+        imported,
+        skipped,
+        status: "failed",
+      },
+    });
+    throw error;
+  }
 }
 
 main()
