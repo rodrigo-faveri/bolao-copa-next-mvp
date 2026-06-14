@@ -187,11 +187,14 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .roundHistoryItem strong { color: #116530; }
 .roundHistoryItem span { font-weight: 900; }
 .roundHistoryItem small { grid-column: 1 / -1; color: #617068; font-weight: 800; }
-.resultsSummary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 18px; }
+.resultsSummary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 18px; }
 .resultsSummary article, .resultCard { border: 1px solid #dce5df; border-radius: 22px; background: white; box-shadow: 0 12px 34px rgb(20 32 25 / 8%); }
 .resultsSummary article { display: grid; gap: 8px; padding: 20px; }
 .resultsSummary strong { color: #116530; font-size: clamp(1.8rem, 4vw, 2.6rem); line-height: 1; }
 .resultsSummary p { margin-bottom: 0; }
+.resultsFilters { display: grid; grid-template-columns: minmax(160px, .8fr) minmax(190px, .9fr) auto auto; gap: 12px; align-items: end; margin-bottom: 16px; }
+.resultsFilters label { display: grid; gap: 7px; color: #617068; font-size: .82rem; font-weight: 900; text-transform: uppercase; }
+.resultsFilters select { width: 100%; }
 .resultsList { display: grid; gap: 14px; }
 .resultCard { display: grid; gap: 16px; padding: 18px; }
 .resultCardPending { border-color: rgb(22 163 74 / 22%); background: linear-gradient(135deg, #ffffff 0%, #f3fff6 100%); }
@@ -210,11 +213,12 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .resultInfo div strong { display: block; margin-bottom: 6px; color: #116530; }
 .resultInfo div p { margin-bottom: 0; color: #617068; line-height: 1.4; }
 .resultAutoSummary { margin-bottom: 0; padding: 12px; border: 1px solid #e7eee9; border-radius: 14px; background: #fffdf5; color: #617068; font-weight: 800; line-height: 1.4; }
+.resultCardHeader h2, .resultComparison strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cupHeader { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center; margin-bottom: 16px; padding: 26px; overflow: visible; border: 1px solid rgb(255 255 255 / 28%); border-radius: 28px; background: linear-gradient(135deg, #053d2e 0%, #08704f 47%, #0fa36b 100%); color: white; box-shadow: 0 22px 55px rgb(6 68 47 / 22%); }
 .cupHeader::before { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 10% 10%, rgb(255 255 255 / 20%), transparent 18rem), radial-gradient(circle at 92% 15%, rgb(255 210 75 / 35%), transparent 14rem); pointer-events: none; }
 .cupHeaderGlow { position: absolute; right: -56px; bottom: -70px; width: 220px; height: 220px; border-radius: 999px; background: rgb(255 214 84 / 22%); filter: blur(4px); }
 .cupHeaderContent, .cupHeaderAccount { position: relative; z-index: 1; }
-.cupHeaderAccount { z-index: 20; }
+.cupHeaderAccount { z-index: 20; display: grid; gap: 10px; justify-items: end; }
 .cupHeader h1 { margin: 8px 0 8px; font-size: clamp(2rem, 5vw, 3.7rem); letter-spacing: -0.06em; line-height: .95; }
 .cupHeader p { max-width: 560px; margin-bottom: 18px; color: rgb(255 255 255 / 82%); font-size: 1.02rem; }
 .eyebrow { display: inline-flex; width: fit-content; padding: 6px 10px; border: 1px solid rgb(255 255 255 / 24%); border-radius: 999px; background: rgb(255 255 255 / 12%); color: #ffe28a; font-size: .78rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
@@ -228,6 +232,9 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .cupHeaderAccount .authName { color: white; }
 .cupHeaderAccount .buttonSecondary { background: rgb(255 255 255 / 88%); color: #123421; }
 .authLoginButton { background: #ffd75b; color: #123421; }
+.languageSwitcher { display: inline-flex; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid rgb(255 255 255 / 20%); border-radius: 999px; background: rgb(255 255 255 / 12%); color: white; font-size: .78rem; font-weight: 900; backdrop-filter: blur(12px); }
+.languageSwitcher span { color: rgb(255 255 255 / 82%); text-transform: uppercase; }
+.languageSwitcher select { width: auto; min-width: 112px; padding: 6px 28px 6px 10px; border-color: rgb(255 255 255 / 35%); border-radius: 999px; background: rgb(255 255 255 / 90%); color: #123421; font-size: .82rem; font-weight: 900; }
 .authMenu { position: relative; }
 .authMenu summary { list-style: none; }
 .authMenu summary::-webkit-details-marker { display: none; }
@@ -251,6 +258,8 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .deadlineAlertsUrgent { border-color: #f1cf5a; background: linear-gradient(135deg, #fffdf2 0%, #f8fbf9 100%); }
 .deadlineAlertsOk { border-color: #bfe7c8; background: linear-gradient(135deg, #f3fff6 0%, #ffffff 100%); }
 .deadlineAlertsHeader { display: flex; justify-content: space-between; gap: 14px; align-items: center; }
+.deadlineAlertsActions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
+.deadlineAlertsActions span { padding: 7px 10px; border-radius: 999px; background: rgb(255 255 255 / 78%); color: #617068; font-size: .86rem; font-weight: 900; }
 .deadlineAlertList { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
 .deadlineAlertItem { display: grid; gap: 5px; padding: 12px; border: 1px solid #e7eee9; border-radius: 14px; background: rgb(255 255 255 / 82%); }
 .deadlineAlertItem strong { color: #142019; }
@@ -267,7 +276,8 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .realTimeHero, .realTimeTimeline { margin-bottom: 18px; border: 1px solid #dce5df; border-radius: 22px; background: white; box-shadow: 0 14px 34px rgb(20 32 25 / 8%); }
 .realTimeHero { overflow: hidden; }
 .realTimeScoreboard { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 16px; align-items: center; padding: 24px; background: linear-gradient(135deg, #f8fbf9 0%, #fff8df 100%); }
-.realTimeTeam { display: flex; gap: 12px; align-items: center; font-size: clamp(1.2rem, 3vw, 2rem); }
+.realTimeTeam { display: flex; min-width: 0; gap: 12px; align-items: center; font-size: clamp(1.2rem, 3vw, 2rem); }
+.realTimeTeam strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .realTimeTeamRight { justify-content: flex-end; text-align: right; }
 .realTimeTeam .teamFlag, .realTimeTeam .teamFlagPlaceholder { width: 46px; height: 32px; }
 .realTimeScore { display: grid; gap: 8px; justify-items: center; min-width: 130px; text-align: center; }
@@ -307,7 +317,7 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .matchCountdown { grid-column: 1 / -1; width: fit-content; padding: 5px 9px; border-radius: 999px; background: #effaf1; color: #116530; font-size: .78rem; font-weight: 900; text-transform: none; }
 .matchCountdownClosed { background: #f4f0e8; color: #8a5b12; }
 .simulatorMatch .teamName { min-width: 0; }
-.simulatorMatch .teamName span:last-child { min-width: 0; overflow-wrap: anywhere; line-height: 1.1; }
+.simulatorMatch .teamName span:last-child { min-width: 0; overflow: hidden; line-height: 1.1; text-overflow: ellipsis; white-space: nowrap; }
 .teamLeft { justify-content: flex-end; text-align: right; }
 .teamLeft .teamFlag { order: 2; }
 .teamRight { justify-content: flex-start; text-align: left; }
@@ -377,17 +387,20 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .knockoutCard { display: grid; gap: 14px; padding: 18px; border: 1px solid #dce5df; border-radius: 18px; background: white; box-shadow: 0 12px 28px rgb(20 32 25 / 7%); }
 .knockoutCardHeader { display: flex; justify-content: space-between; gap: 12px; align-items: center; color: #617068; }
 .knockoutCardTeams { display: grid; gap: 10px; }
-.knockoutPickTeam { display: grid; grid-template-columns: 42px 34px 1fr; gap: 10px; align-items: center; width: 100%; min-height: 58px; padding: 10px 12px; border: 1px solid #dce5df; border-radius: 14px; background: #f8fbf9; color: #142019; text-align: left; }
+.knockoutPickTeam { display: grid; grid-template-columns: 42px 34px minmax(0, 1fr); gap: 10px; align-items: center; width: 100%; min-height: 58px; padding: 10px 12px; border: 1px solid #dce5df; border-radius: 14px; background: #f8fbf9; color: #142019; text-align: left; }
 .knockoutPickTeam:not(:disabled):hover { border-color: #116530; background: #effaf1; }
 .knockoutPickTeamSelected { border-color: #116530; background: #effaf1; box-shadow: inset 4px 0 0 #116530; }
 .knockoutPickTeam .teamFlag, .knockoutPickTeam .teamFlagPlaceholder { width: 34px; height: 24px; }
 .knockoutPickSlot { color: #617068; font-size: .8rem; font-weight: 900; text-align: right; }
+.knockoutPickTeam span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .knockoutCard p { margin-bottom: 0; font-size: .9rem; }
 
 @media (max-width: 640px) {
   .simulatorGrid { grid-template-columns: 1fr; }
   .cupHeader { grid-template-columns: 1fr; padding: 22px; border-radius: 22px; }
+  .cupHeaderAccount { justify-items: stretch; }
   .cupHeaderAccount .authControls { width: 100%; justify-content: space-between; }
+  .languageSwitcher { justify-content: space-between; width: 100%; }
   .pillNav { display: grid; grid-template-columns: repeat(2, 1fr); }
   .pillLink { padding-inline: 10px; }
   .homeGrid { grid-template-columns: 1fr; }
@@ -419,12 +432,14 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
   .profileGrid { grid-template-columns: 1fr; }
   .profilePreview { align-items: flex-start; flex-direction: column; }
   .resultsSummary { grid-template-columns: 1fr; }
+  .resultsFilters { grid-template-columns: 1fr; }
   .resultCardHeader { flex-direction: column; }
   .resultStatusStack { justify-items: start; }
   .resultComparison { grid-template-columns: 1fr; }
   .resultInfo div { left: 0; right: auto; }
   .pageToolbar { align-items: flex-start; flex-direction: column; }
   .deadlineAlertsHeader { align-items: flex-start; flex-direction: column; }
+  .deadlineAlertsActions { justify-content: flex-start; }
   .toolbarTips { justify-content: flex-start; }
   .stageTabs { gap: 0; justify-content: stretch; }
   .stageTab { flex: 1; min-width: 0; font-size: .75rem; }

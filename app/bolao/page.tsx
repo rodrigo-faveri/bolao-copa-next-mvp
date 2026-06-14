@@ -4,6 +4,7 @@ import { auth } from "../../auth";
 import { CupHeader } from "../../components/CupHeader";
 import { PredictionDeadlineAlerts } from "../../components/PredictionDeadlineAlerts";
 import { WorldCupSimulator } from "../../components/WorldCupSimulator";
+import { getCurrentLocale } from "../../lib/i18n";
 import { isPredictionOpen, PREDICTION_CLOSE_MINUTES } from "../../lib/prediction";
 import { prisma } from "../../lib/prisma";
 import { allowUnscheduledPredictions } from "../../lib/runtime-config";
@@ -16,6 +17,7 @@ export default async function BolaoPage({ searchParams }: { searchParams?: Promi
   const session = await auth();
   const email = session?.user?.email;
   if (!email) redirect("/");
+  const locale = await getCurrentLocale();
 
   const params = await searchParams;
   const poolInviteCode = typeof params?.bolao === "string" ? params.bolao.toUpperCase() : null;
@@ -89,6 +91,7 @@ export default async function BolaoPage({ searchParams }: { searchParams?: Promi
         canSave={canSave}
         enableKnockout
         knockoutVariant="cards"
+        locale={locale}
         saveAction={savePrediction}
         showStandings={false}
         matches={matches.map((match) => {

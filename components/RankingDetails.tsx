@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { getTeamDisplayName } from "../lib/teams";
 
 export type RankingHit = {
   matchId: string;
@@ -58,7 +59,7 @@ export function RankingDetails({ rows }: { rows: RankingRow[] }) {
                       <span className={`hitBadge ${hit.kind === "exact" ? "hitBadgeExact" : ""}`}>
                         {hit.kind === "exact" ? "Placar exato" : "Resultado"}
                       </span>
-                      <span>{hit.teamA} x {hit.teamB}</span>
+                      <span>{getTeamDisplayName(hit.teamA)} x {getTeamDisplayName(hit.teamB)}</span>
                       <span className="muted">Palpite {hit.prediction}</span>
                       <span className="muted">Resultado {hit.result}</span>
                       <strong>+{hit.points}</strong>

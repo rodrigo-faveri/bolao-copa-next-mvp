@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
 import { auth } from "../../auth";
 import { CupHeader } from "../../components/CupHeader";
+import { ResultsExplorer, type ResultFilter, type ResultItem } from "../../components/ResultsExplorer";
+import { getCurrentLocale } from "../../lib/i18n";
 import { calculatePredictionPoints } from "../../lib/prediction";
 import { prisma } from "../../lib/prisma";
-import { getTeamFlagUrl } from "../../lib/teams";
+import { getTeamDisplayName } from "../../lib/teams";
 import { getMatchVenue } from "../../lib/venues";
 
 export const dynamic = "force-dynamic";
@@ -16,13 +18,6 @@ const dateFormatter = new Intl.DateTimeFormat("pt-BR", {
   minute: "2-digit",
   timeZone: "America/Sao_Paulo",
 });
-
-function flagFor(team: string) {
-  const flagUrl = getTeamFlagUrl(team);
-  if (!flagUrl) return <span className="teamFlagPlaceholder" aria-hidden="true" />;
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img className="teamFlag" src={flagUrl} alt={`Bandeira de ${team}`} loading="lazy" />;
-}
 
 function getOutcome(goalsA: number, goalsB: number) {
   return Math.sign(goalsA - goalsB);
@@ -119,10 +114,19 @@ function buildMatchSummary({
   return `Resumo automatico: ${teamA} ${resultA} x ${resultB} ${teamB}. Seu palpite nao acompanhou o resultado oficial desta vez.`;
 }
 
+function getResultFilter(prediction: { goalsA: number; goalsB: number; points: number } | null, resultA: number | null, resultB: number | null): ResultFilter {
+  if (resultA === null || resultB === null) return "pending";
+  if (!prediction) return "noPrediction";
+  if (prediction.points === 5) return "exact";
+  if (prediction.points === 3) return "outcome";
+  return "miss";
+}
+
 export default async function ResultadosPage() {
   const session = await auth();
   const email = session?.user?.email;
   if (!email) redirect("/");
+  const locale = await getCurrentLocale();
 
   const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
   if (!user) redirect("/");
@@ -152,6 +156,47 @@ export default async function ResultadosPage() {
     const prediction = match.predictions[0];
     return prediction && prediction.goalsA === match.resultGoalsA && prediction.goalsB === match.resultGoalsB;
   }).length;
+  const outcomeHits = resolvedMatches.filter((match) => match.predictions[0]?.points === 3).length;
+  const predictionsCount = matches.filter((match) => Boolean(match.predictions[0])).length;
+  const resultItems: ResultItem[] = matches.map((match) => {
+    const prediction = match.predictions[0] ?? null;
+    const resultA = match.resultGoalsA;
+    const resultB = match.resultGoalsB;
+    const hasOfficialResult = resultA !== null && resultB !== null;
+    const explanation = explainPoints({
+      predictedA: prediction?.goalsA ?? null,
+      predictedB: prediction?.goalsB ?? null,
+      resultA,
+      resultB,
+    });
+
+    return {
+      id: match.id,
+      group: match.group,
+      teamA: match.teamA,
+      teamB: match.teamB,
+      startsAtLabel: match.startsAt ? dateFormatter.format(match.startsAt) : "Sem data",
+      venue: getMatchVenue(match.group, match.teamA, match.teamB),
+      phase: getMatchPhase(match, now),
+      hasOfficialResult,
+      resultA,
+      resultB,
+      predictionA: prediction?.goalsA ?? null,
+      predictionB: prediction?.goalsB ?? null,
+      points: prediction?.points ?? null,
+      filter: getResultFilter(prediction, resultA, resultB),
+      explanationLabel: explanation.label,
+      explanationText: explanation.text,
+      summary: buildMatchSummary({
+        prediction,
+        resultA,
+        resultB,
+        teamA: getTeamDisplayName(match.teamA, locale),
+        teamB: getTeamDisplayName(match.teamB, locale),
+      }),
+    };
+  });
+
   return (
     <main className="container bolaoPage">
       <CupHeader
@@ -160,89 +205,24 @@ export default async function ResultadosPage() {
         description="Compare seus palpites com os placares oficiais e entenda exatamente por que pontuou ou nao."
       />
 
-      <section className="resultsSummary">
-        <article>
-          <span className="badge badgeGold">Total</span>
-          <strong>{totalPoints} pts</strong>
-          <p className="muted">Somados nas partidas encerradas.</p>
-        </article>
-        <article>
-          <span className="badge badgeGold">Placares exatos</span>
-          <strong>{exactHits}</strong>
-          <p className="muted">Valem 5 pontos cada.</p>
-        </article>
-        <article>
-          <span className="badge badgeGold">Pendentes</span>
-          <strong>{waitingMatches.length}</strong>
-          <p className="muted">Jogos em andamento ou aguardando placar.</p>
-        </article>
-      </section>
-
       {matches.length === 0 ? (
         <section className="card">
           <h2>Nenhuma partida em acompanhamento ainda</h2>
           <p className="muted">Quando uma partida comecar ou tiver placar oficial, ela aparece aqui automaticamente.</p>
         </section>
       ) : (
-        <section className="resultsList">
-          {matches.map((match) => {
-            const prediction = match.predictions[0] ?? null;
-            const resultA = match.resultGoalsA;
-            const resultB = match.resultGoalsB;
-            const hasOfficialResult = resultA !== null && resultB !== null;
-            const phase = getMatchPhase(match, now);
-            const explanation = explainPoints({
-              predictedA: prediction?.goalsA ?? null,
-              predictedB: prediction?.goalsB ?? null,
-              resultA,
-              resultB,
-            });
-            const summary = buildMatchSummary({
-              prediction,
-              resultA,
-              resultB,
-              teamA: match.teamA,
-              teamB: match.teamB,
-            });
-
-            return (
-              <article className={`resultCard ${hasOfficialResult ? "" : "resultCardPending"}`} key={match.id}>
-                <div className="resultCardHeader">
-                  <div>
-                    <span className="badge">Grupo {match.group}</span>
-                    <h2>{match.teamA} x {match.teamB}</h2>
-                    <p className="muted">
-                      {match.startsAt ? dateFormatter.format(match.startsAt) : "Sem data"} - {getMatchVenue(match.group, match.teamA, match.teamB)}
-                    </p>
-                  </div>
-                  <div className="resultStatusStack">
-                    <span className={hasOfficialResult ? "badge" : "badge badgeLive"}>{phase}</span>
-                    <strong className="resultPoints">{hasOfficialResult ? `${prediction?.points ?? 0} pts` : "Pendente"}</strong>
-                  </div>
-                </div>
-
-                <div className="resultComparison">
-                  <div>
-                    <span>Resultado oficial</span>
-                    <strong>{hasOfficialResult ? <>{flagFor(match.teamA)} {resultA} x {resultB} {flagFor(match.teamB)}</> : "Aguardando placar"}</strong>
-                  </div>
-                  <div>
-                    <span>Seu palpite</span>
-                    <strong>{prediction ? `${prediction.goalsA} x ${prediction.goalsB}` : "Sem palpite"}</strong>
-                  </div>
-                  <details className="resultInfo">
-                    <summary aria-label="Explicar pontuacao">i</summary>
-                    <div>
-                      <strong>{explanation.label}</strong>
-                      <p>{explanation.text}</p>
-                    </div>
-                  </details>
-                </div>
-                <p className="resultAutoSummary">{summary}</p>
-              </article>
-            );
-          })}
-        </section>
+        <ResultsExplorer
+          items={resultItems}
+          locale={locale}
+          summary={{
+            totalPoints,
+            exactHits,
+            outcomeHits,
+            resolvedMatches: resolvedMatches.length,
+            waitingMatches: waitingMatches.length,
+            predictionsCount,
+          }}
+        />
       )}
     </main>
   );
