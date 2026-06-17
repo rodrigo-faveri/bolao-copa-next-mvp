@@ -17,6 +17,10 @@ const checkedEnvNames = [
   "ADMIN_EMAILS",
   "OPENROUTER_API_KEY",
   "API_FOOTBALL_KEY",
+  "MONITORING_WEBHOOK_URL",
+  "VAPID_PUBLIC_KEY",
+  "VAPID_PRIVATE_KEY",
+  "VAPID_SUBJECT",
 ];
 
 function getEnvFileArg() {
@@ -115,6 +119,7 @@ const placeholderChecks: Array<[string, string[]]> = [
   ["AUTH_URL", ["seudominio.com"]],
   ["UPSTASH_REDIS_REST_URL", ["seu-redis"]],
   ["UPSTASH_REDIS_REST_TOKEN", ["seu-token"]],
+  ["VAPID_SUBJECT", ["voce@email.com"]],
 ];
 
 for (const [name, placeholders] of placeholderChecks) {
@@ -209,6 +214,28 @@ if (!process.env.OPENROUTER_API_KEY) {
 
 if (!process.env.API_FOOTBALL_KEY) {
   warnings.push("API_FOOTBALL_KEY is empty. Real-time match pages will use local fallback.");
+}
+
+const vapidValues = [process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY, process.env.VAPID_SUBJECT];
+const configuredVapidValues = vapidValues.filter(Boolean).length;
+if (configuredVapidValues > 0 && configuredVapidValues < vapidValues.length) {
+  errors.push("VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY and VAPID_SUBJECT must be configured together.");
+}
+if (configuredVapidValues === 0) {
+  warnings.push("VAPID keys are empty. Push notifications outside the browser will be disabled.");
+}
+
+if (process.env.MONITORING_WEBHOOK_URL) {
+  try {
+    const monitoringUrl = new URL(process.env.MONITORING_WEBHOOK_URL);
+    if (!["https:", "http:"].includes(monitoringUrl.protocol)) {
+      errors.push("MONITORING_WEBHOOK_URL must use http:// or https://.");
+    }
+  } catch {
+    errors.push("MONITORING_WEBHOOK_URL must be a valid URL.");
+  }
+} else {
+  warnings.push("MONITORING_WEBHOOK_URL is empty. External error monitoring is disabled.");
 }
 
 for (const warning of warnings) {

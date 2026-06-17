@@ -1,0 +1,27 @@
+name: Push pending pick reminders
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/30 19-23 * * *"
+    - cron: "*/30 0-3 * * *"
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run prisma:generate
+      - run: npm run push:pending-picks
+        env:
+          AUTH_URL: ${{ secrets.AUTH_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PUSH_REMINDER_WINDOW_MINUTES: ${{ vars.PUSH_REMINDER_WINDOW_MINUTES || '60' }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}

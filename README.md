@@ -35,6 +35,7 @@ App recreativo para palpites da Copa do Mundo de 2026 entre amigos, sem dinheiro
 - Historico de desempenho do usuario por rodada.
 - Simulador de fase de grupos com classificacao em tempo real.
 - Simulador de mata-mata por etapas.
+- Home com jogos ao vivo/proximos jogos e carrossel de noticias.
 - Pagina de noticias com filtros.
 - Painel admin para registrar resultados e recalcular pontos.
 - Boloes privados com codigo/link de convite.
@@ -45,6 +46,8 @@ App recreativo para palpites da Copa do Mundo de 2026 entre amigos, sem dinheiro
 - Auditoria em banco para eventos sensiveis.
 - Headers de seguranca no Next.js.
 - Rate limit para salvar palpites e consultar IA.
+- Push notifications reais opcionais para avisos fora do navegador.
+- Monitoramento externo opcional via webhook para logs de erro.
 
 ## Paginas
 
@@ -120,6 +123,19 @@ ADMIN_EMAILS=""
 OPENROUTER_API_KEY=""
 OPENROUTER_MODEL="nex-agi/nex-n2-pro:free"
 
+SERPAPI_KEY=""
+SERPAPI_RESULT_DELAY_MINUTES="120"
+SERPAPI_RESULT_MAX_MATCHES="12"
+SERPAPI_DRY_RUN="false"
+SERPAPI_DEBUG="false"
+
+VAPID_PUBLIC_KEY=""
+VAPID_PRIVATE_KEY=""
+VAPID_SUBJECT="mailto:voce@email.com"
+PUSH_REMINDER_WINDOW_MINUTES="60"
+
+MONITORING_WEBHOOK_URL=""
+
 API_FOOTBALL_KEY=""
 API_FOOTBALL_BASE_URL="https://v3.football.api-sports.io"
 SPORTS_API_CACHE_SECONDS="60"
@@ -135,6 +151,9 @@ Notas:
 - `ALLOWED_EMAILS` e `ALLOWED_EMAIL_DOMAINS` restringem quem pode entrar.
 - `ADMIN_EMAILS` define quem pode acessar `/admin`.
 - `OPENROUTER_API_KEY` e opcional. Sem chave, o app usa sugestao local.
+- `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` e `VAPID_SUBJECT` ativam Web Push real. Gere com `npx web-push generate-vapid-keys`.
+- `PUSH_REMINDER_WINDOW_MINUTES` define a janela de envio dos avisos de palpite pendente.
+- `MONITORING_WEBHOOK_URL` envia logs de erro para uma plataforma externa via HTTP POST.
 - `API_FOOTBALL_KEY` e opcional/legado. Sem chave, a pagina de tempo real usa dados locais.
 - `SPORTS_API_CACHE_SECONDS` controla o cache das chamadas esportivas. O padrao de 60 segundos ajuda a preservar o plano free.
 
@@ -194,7 +213,7 @@ Tambem existe sincronizacao semi-automatica pos-jogo usando SerpAPI/Google Sport
 npm run result:sync-serpapi
 ```
 
-Ela procura partidas que ja passaram da janela configurada por `SERPAPI_RESULT_DELAY_MINUTES`, ainda nao tem resultado oficial e tenta importar o placar final. Se a resposta nao for confiavel ou nao estiver finalizada, a partida e ignorada.
+Ela procura partidas que ja passaram da janela configurada por `SERPAPI_RESULT_DELAY_MINUTES`, ainda nao tem resultado oficial e tenta importar o placar final. Se a resposta nao for confiavel ou nao estiver finalizada, a partida e ignorada. Quando a fonte traz gols ou cartoes no payload estruturado, esses lances sao importados automaticamente para `MatchEvent`.
 
 Para testar sem salvar no banco:
 
@@ -221,6 +240,35 @@ Ao registrar o resultado:
 - o placar oficial fica separado do palpite do usuario;
 - a partida fica encerrada;
 - os pontos dos palpites da partida sao recalculados.
+- lances retornados por fonte estruturada sao salvos na linha do tempo da partida.
+
+## Push Notifications
+
+O app suporta Web Push para avisar usuarios mesmo fora da aba do navegador.
+
+Para ativar:
+
+1. Gere as chaves VAPID:
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+2. Configure:
+
+```env
+VAPID_PUBLIC_KEY="..."
+VAPID_PRIVATE_KEY="..."
+VAPID_SUBJECT="mailto:voce@email.com"
+```
+
+3. Agende o job:
+
+```bash
+npm run push:pending-picks
+```
+
+O job busca partidas cujo fechamento de palpite esta dentro de `PUSH_REMINDER_WINDOW_MINUTES`, ignora usuarios que ja palpitaram e evita duplicidade usando a tabela `PushNotificationLog`.
 
 ## Partidas ao Vivo e Tempo Real
 
@@ -282,6 +330,7 @@ Medidas atuais:
 - HSTS em producao.
 - Chaves de IA ficam apenas no servidor.
 - Logs estruturados em JSON para login bloqueado, admin e IA.
+- Webhook externo opcional para logs de erro via `MONITORING_WEBHOOK_URL`.
 - Tabela `AuditLog` para eventos de negocio e seguranca: palpite salvo, resultado admin salvo e tentativa admin negada.
 - Auditoria tambem registra atualizacao de perfil.
 - `npm run production:check` carrega `.env` e valida configuracoes sensiveis antes do deploy.
@@ -310,6 +359,7 @@ npm run prisma:seed
 npm run result:set -- <matchId> <golsA> <golsB>
 npm run result:import -- data/results.csv
 npm run result:sync-serpapi
+npm run push:pending-picks
 ```
 
 ## Verificacoes
@@ -351,6 +401,6 @@ npm run test:integration
 
 ## Proximas Evolucoes
 
-- Push notifications reais para avisos fora do navegador.
-- Monitoramento externo de logs e erros em producao.
-- Importacao automatica de eventos/lances se surgir uma API gratuita confiavel.
+- Preferencias de notificacao por usuario.
+- Dashboard de saude dos jobs agendados.
+- Melhorias de observabilidade com provedor dedicado, como Sentry, Logtail ou Datadog.
