@@ -300,6 +300,7 @@ npm run build
 npm run start
 npm run lint
 npm test
+npm run test:integration
 npm run check
 npm run production:check
 npm run production:check:prod
@@ -327,9 +328,29 @@ Ou:
 npm run check
 ```
 
+### Testes de integracao com PostgreSQL
+
+Os testes de integracao usam um banco separado informado por `TEST_DATABASE_URL`.
+Eles criam dados temporarios, registram um resultado oficial e validam se os pontos dos palpites sao recalculados.
+
+Exemplo:
+
+```bash
+DATABASE_URL="postgresql://postgres:SENHA@localhost:5432/palpites_test?schema=public" npm run prisma:deploy
+TEST_DATABASE_URL="postgresql://postgres:SENHA@localhost:5432/palpites_test?schema=public" npm run test:integration
+```
+
+No Windows PowerShell:
+
+```powershell
+$env:TEST_DATABASE_URL="postgresql://postgres:SENHA@localhost:5432/palpites_test?schema=public"
+$env:DATABASE_URL=$env:TEST_DATABASE_URL
+npm run prisma:deploy
+npm run test:integration
+```
+
 ## Proximas Evolucoes
 
-- Perfil publico com apelido e avatar.
-- Auditoria de alteracoes administrativas.
-- Testes de integracao com PostgreSQL.
-- Historico de desempenho do usuario por rodada.
+- Push notifications reais para avisos fora do navegador.
+- Monitoramento externo de logs e erros em producao.
+- Importacao automatica de eventos/lances se surgir uma API gratuita confiavel.
