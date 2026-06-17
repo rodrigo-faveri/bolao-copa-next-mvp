@@ -75,6 +75,26 @@ function buildRoundHistory(predictions: PredictionWithMatch[]) {
   return Array.from(rounds.values()).sort((a, b) => a.round - b.round);
 }
 
+function buildProfileStats(predictions: PredictionWithMatch[], roundHistory: ReturnType<typeof buildRoundHistory>) {
+  const resolvedPredictions = predictions.filter((prediction) => prediction.match.resultGoalsA !== null && prediction.match.resultGoalsB !== null);
+  const exactHits = resolvedPredictions.filter((prediction) => prediction.goalsA === prediction.match.resultGoalsA && prediction.goalsB === prediction.match.resultGoalsB).length;
+  const outcomeHits = resolvedPredictions.filter((prediction) => prediction.points > 0 && !(prediction.goalsA === prediction.match.resultGoalsA && prediction.goalsB === prediction.match.resultGoalsB)).length;
+  const pendingPredictions = predictions.length - resolvedPredictions.length;
+  const scoringHits = exactHits + outcomeHits;
+  const bestRound = roundHistory.reduce<(typeof roundHistory)[number] | null>((best, round) => {
+    if (!best || round.points > best.points) return round;
+    return best;
+  }, null);
+
+  return {
+    accuracy: resolvedPredictions.length > 0 ? Math.round((scoringHits / resolvedPredictions.length) * 100) : 0,
+    exactHits,
+    outcomeHits,
+    pendingPredictions,
+    bestRound,
+  };
+}
+
 export default async function PerfilPage() {
   const session = await auth();
   const email = session?.user?.email;
@@ -88,6 +108,7 @@ export default async function PerfilPage() {
   const avatarColor = user.avatarColor ?? avatarColors[0];
   const totalPoints = user.predictions.reduce((sum, prediction) => sum + prediction.points, 0);
   const roundHistory = buildRoundHistory(user.predictions);
+  const stats = buildProfileStats(user.predictions, roundHistory);
 
   return (
     <main className="container bolaoPage">
@@ -102,6 +123,29 @@ export default async function PerfilPage() {
               <h2>{name}</h2>
               <p className="muted">{formatMessage(copy.profile.accumulated, { points: totalPoints, predictions: user.predictions.length })}</p>
             </div>
+          </div>
+
+          <div className="profileStatsGrid">
+            <article>
+              <span>{copy.profile.accuracy}</span>
+              <strong>{stats.accuracy}%</strong>
+            </article>
+            <article>
+              <span>{copy.profile.exactHits}</span>
+              <strong>{stats.exactHits}</strong>
+            </article>
+            <article>
+              <span>{copy.profile.outcomeHits}</span>
+              <strong>{stats.outcomeHits}</strong>
+            </article>
+            <article>
+              <span>{copy.profile.pending}</span>
+              <strong>{stats.pendingPredictions}</strong>
+            </article>
+            <article className="profileStatsWide">
+              <span>{copy.profile.bestRound}</span>
+              <strong>{stats.bestRound ? formatMessage(copy.profile.bestRoundValue, { round: stats.bestRound.round, points: stats.bestRound.points }) : copy.profile.noBestRound}</strong>
+            </article>
           </div>
 
           <form action={saveProfile} className="profileForm">
