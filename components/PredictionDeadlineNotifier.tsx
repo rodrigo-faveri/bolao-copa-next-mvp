@@ -34,6 +34,17 @@ function supportsNotifications() {
   return typeof window !== "undefined" && "Notification" in window;
 }
 
+function supportsPush() {
+  return supportsNotifications() && "serviceWorker" in navigator && "PushManager" in window;
+}
+
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+}
+
 function sentKey(matchId: string, reminderKey: string) {
   return `${storageSentPrefix}:${matchId}:${reminderKey}`;
 }
@@ -165,11 +176,42 @@ export function PredictionDeadlineNotifier({ locale = "pt-BR", matches }: { loca
     const nextEnabled = nextPermission === "granted";
     setEnabled(nextEnabled);
     window.localStorage.setItem(storageEnabledKey, String(nextEnabled));
+
+    if (!nextEnabled || !supportsPush()) return;
+
+    const keyResponse = await fetch("/api/push/public-key");
+    const { publicKey } = (await keyResponse.json()) as { publicKey?: string };
+    if (!publicKey) return;
+
+    const registration = await navigator.serviceWorker.register("/push-sw.js");
+    const existingSubscription = await registration.pushManager.getSubscription();
+    const subscription = existingSubscription ?? await registration.pushManager.subscribe({
+      applicationServerKey: urlBase64ToUint8Array(publicKey),
+      userVisibleOnly: true,
+    });
+
+    await fetch("/api/push/subscribe", {
+      body: JSON.stringify(subscription),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
   }
 
-  function disableNotifications() {
+  async function disableNotifications() {
     setEnabled(false);
     window.localStorage.setItem(storageEnabledKey, "false");
+
+    if (!supportsPush()) return;
+    const registration = await navigator.serviceWorker.getRegistration("/push-sw.js");
+    const subscription = await registration?.pushManager.getSubscription();
+    if (!subscription) return;
+
+    await fetch("/api/push/subscribe", {
+      body: JSON.stringify({ endpoint: subscription.endpoint }),
+      headers: { "Content-Type": "application/json" },
+      method: "DELETE",
+    });
+    await subscription.unsubscribe();
   }
 
   function closePrompt() {

@@ -18,7 +18,8 @@
     "prisma:seed": "tsx prisma/seed.ts",
     "result:set": "tsx scripts/set-result.ts",
     "result:import": "tsx scripts/import-results.ts",
-    "result:sync-serpapi": "tsx scripts/sync-serpapi-results.ts"
+    "result:sync-serpapi": "tsx scripts/sync-serpapi-results.ts",
+    "push:pending-picks": "tsx scripts/send-pending-pick-pushes.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "2.11.1",
@@ -27,6 +28,7 @@
     "next-auth": "5.0.0-beta.30",
     "react": "19.1.1",
     "react-dom": "19.1.1",
+    "web-push": "^3.6.7",
     "zod": "3.25.76"
   },
   "devDependencies": {
