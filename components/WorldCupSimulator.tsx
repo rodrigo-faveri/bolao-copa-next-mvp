@@ -331,6 +331,7 @@ function shortTeamName(team: string) {
 export function WorldCupSimulator({
   canSave,
   enableKnockout = false,
+  focusMatchId,
   knockoutVariant = "bracket",
   locale = "pt-BR",
   matches,
@@ -339,6 +340,7 @@ export function WorldCupSimulator({
 }: {
   canSave: boolean;
   enableKnockout?: boolean;
+  focusMatchId?: string | null;
   knockoutVariant?: KnockoutVariant;
   locale?: AppLocale;
   matches: SimulatorMatch[];
@@ -356,6 +358,7 @@ export function WorldCupSimulator({
   const [aiAnalysisByMatch, setAiAnalysisByMatch] = useState<Record<string, MatchAiState>>({});
   const [saveFeedbackByMatch, setSaveFeedbackByMatch] = useState<Record<string, SaveFeedback>>({});
   const saveFeedbackTimers = useRef<Record<string, number>>({});
+  const lastFocusedMatch = useRef<string | null>(null);
   useEffect(() => {
     const timers = saveFeedbackTimers.current;
     setIsHydrated(true);
@@ -400,6 +403,42 @@ export function WorldCupSimulator({
   const selectedKnockoutRound = bracketRounds[knockoutRoundIndex] ?? bracketRounds[0];
   const championMatch = bracketRounds.at(-1)?.matches[0];
   const champion = championMatch ? knockoutWinners[championMatch.id] : undefined;
+
+  function focusMatch(matchId: string) {
+    const targetGroup = groups.find((item) => item.rounds.some((round) => round.some((match) => match.id === matchId)));
+    if (!targetGroup) return;
+
+    const roundIndex = targetGroup.rounds.findIndex((round) => round.some((match) => match.id === matchId));
+    if (roundIndex < 0) return;
+
+    setStageView("groups");
+    setRoundByGroup((current) => ({ ...current, [targetGroup.group]: roundIndex }));
+    window.setTimeout(() => {
+      document.getElementById(`match-${matchId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 80);
+  }
+
+  useEffect(() => {
+    if (!focusMatchId) return;
+    if (lastFocusedMatch.current === focusMatchId) return;
+    lastFocusedMatch.current = focusMatchId;
+    focusMatch(focusMatchId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusMatchId, groups]);
+
+  useEffect(() => {
+    function handleFocus(event: Event) {
+      const detail = (event as CustomEvent<{ matchId?: string }>).detail;
+      if (detail?.matchId) {
+        lastFocusedMatch.current = detail.matchId;
+        focusMatch(detail.matchId);
+      }
+    }
+
+    window.addEventListener("bolao:focus-match", handleFocus);
+    return () => window.removeEventListener("bolao:focus-match", handleFocus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups]);
 
   function chooseWinner(match: BracketMatch, team?: string) {
     if (!team) return;
@@ -642,7 +681,7 @@ export function WorldCupSimulator({
                     const matchIsLive = !hasOfficialResult && isMatchLive(match.status, startsAt, now, isHydrated);
 
                     return (
-                      <form action={saveAction ? (formData) => handleSavePrediction(match.id, formData) : undefined} className="simulatorMatch" key={match.id}>
+                      <form action={saveAction ? (formData) => handleSavePrediction(match.id, formData) : undefined} className="simulatorMatch" id={`match-${match.id}`} key={match.id}>
                         <div className="matchMeta">
                           <span>{startsAt ? formatWeekday(startsAt) : "--"}</span>
                           <strong>{startsAt ? dateFormatter.format(startsAt) : copy.common.noDate}</strong>

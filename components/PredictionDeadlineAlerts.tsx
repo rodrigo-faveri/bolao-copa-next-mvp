@@ -5,6 +5,8 @@ import { getTeamDisplayName } from "../lib/teams";
 
 type DeadlineAlertMatch = {
   id: string;
+  group: string;
+  roundNumber: number;
   teamA: string;
   teamB: string;
   startsAt: Date | null;
@@ -26,6 +28,12 @@ function formatRemaining(deadline: Date, now: Date) {
 
   if (hours <= 0) return `${minutes} min`;
   return `${hours}h ${minutes}min`;
+}
+
+function roundLabel(match: DeadlineAlertMatch, locale: AppLocale) {
+  const groupLabel = locale === "en-US" ? "Group" : "Grupo";
+  const roundWord = locale === "en-US" ? "round" : locale === "es-ES" ? "ronda" : "rodada";
+  return `${groupLabel} ${match.group} · ${match.roundNumber}a ${roundWord}`;
 }
 
 export function PredictionDeadlineAlerts({ locale = "pt-BR", matches, now = new Date() }: { locale?: AppLocale; matches: DeadlineAlertMatch[]; now?: Date }) {
@@ -83,15 +91,21 @@ export function PredictionDeadlineAlerts({ locale = "pt-BR", matches, now = new 
         <div className="deadlineAlertsActions">
           <span>{pendingMatches.length} {locale === "pt-BR" ? "pendente(s) no total" : locale === "en-US" ? "pending total" : "pendiente(s) en total"}</span>
           {closedWithoutPrediction.length > 0 && <span>{closedWithoutPrediction.length} {locale === "pt-BR" ? "ja fechado(s)" : locale === "en-US" ? "already closed" : "ya cerrado(s)"}</span>}
-          <Link className="buttonLink" href="/bolao">{locale === "pt-BR" ? "Palpitar agora" : locale === "en-US" ? "Pick now" : "Pronosticar ahora"}</Link>
+          <Link className="buttonLink" href={`/bolao?focus=${upcoming[0]?.id ?? ""}#bolao-confrontos`}>{locale === "pt-BR" ? "Palpitar agora" : locale === "en-US" ? "Pick now" : "Pronosticar ahora"}</Link>
         </div>
       </div>
       <div className="deadlineAlertList">
         {upcoming.map((match) => (
           <article className="deadlineAlertItem" key={match.id}>
             <strong>{getTeamDisplayName(match.teamA, locale)} x {getTeamDisplayName(match.teamB, locale)}</strong>
+            <small>
+              {roundLabel(match, locale)}
+            </small>
             <span>{locale === "pt-BR" ? "Fecha em" : locale === "en-US" ? "Closes in" : "Cierra en"} {formatRemaining(match.deadline, now)}</span>
             <small>{dateFormatter.format(match.deadline)}</small>
+            <Link className="deadlineAlertLink" href={`/bolao?focus=${match.id}#bolao-confrontos`}>
+              {locale === "pt-BR" ? "Ir para este jogo" : locale === "en-US" ? "Go to this match" : "Ir a este partido"}
+            </Link>
           </article>
         ))}
       </div>

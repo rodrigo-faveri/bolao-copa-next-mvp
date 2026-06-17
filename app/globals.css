@@ -52,6 +52,7 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
   .nav { align-items: flex-start; }
   .nav, .authControls { flex-wrap: wrap; }
   .container { padding: 20px 14px; }
+  .homePanelHeader { align-items: flex-start; flex-direction: column; }
 }
 
 .buttonRow, .linkRow { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
@@ -67,6 +68,25 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .featureCardDark .badge { background: rgb(255 255 255 / 88%); color: #116530; }
 .featureCardDark p { color: rgb(255 255 255 / 78%); }
 .buttonLight { background: #ffd75b; color: #123421; }
+.homePanel { display: grid; gap: 16px; margin-top: 18px; padding: 22px; border: 1px solid #dce5df; border-radius: 24px; background: rgb(255 255 255 / 90%); box-shadow: 0 14px 34px rgb(20 32 25 / 8%); backdrop-filter: blur(8px); }
+.homePanelHeader { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+.homePanelHeader h2 { margin: 8px 0 0; font-size: clamp(1.45rem, 3vw, 2.15rem); }
+.homeMatchGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.homeMatchCard { display: grid; gap: 10px; min-height: 150px; padding: 16px; border: 1px solid #e7eee9; border-radius: 18px; background: linear-gradient(135deg, #fbfdfb 0%, #fffdf5 100%); }
+.homeMatchCardHeader { display: flex; justify-content: space-between; gap: 10px; align-items: center; color: #617068; font-size: .82rem; }
+.homeMatchCardHeader strong { white-space: nowrap; }
+.homeMatchCard h3 { margin-bottom: 0; font-size: 1.2rem; line-height: 1.15; }
+.homeMatchCard p { margin-bottom: 0; }
+.homeMatchScore { width: fit-content; padding: 7px 10px; border-radius: 999px; background: #fff2bd; color: #7a4d00; }
+.homeNewsPanel { grid-template-columns: minmax(0, 1fr); }
+.homeNewsFeature { display: grid; gap: 12px; min-height: 230px; padding: 20px; border: 1px solid #e7eee9; border-radius: 20px; background: linear-gradient(135deg, #123421 0%, #0b6a4b 100%); color: white; }
+.homeNewsFeature .newsMeta { color: rgb(255 255 255 / 72%); }
+.homeNewsFeature h3 { margin-bottom: 0; font-size: clamp(1.35rem, 3vw, 2rem); line-height: 1.1; }
+.homeNewsFeature p { color: rgb(255 255 255 / 78%); line-height: 1.45; }
+.homeNewsFeature .buttonLink { width: fit-content; background: #ffd75b; color: #123421; }
+.homeNewsDots { display: flex; justify-content: center; gap: 8px; }
+.homeNewsDots button { width: 10px; height: 10px; padding: 0; border-radius: 999px; background: #c8d2cc; }
+.homeNewsDots button[aria-pressed="true"] { width: 28px; background: #116530; }
 .rankingCard { overflow: hidden; }
 .rankingHeader { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 22px 24px; border-bottom: 1px solid #e7eee9; }
 .podiumGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 18px; }
@@ -276,6 +296,23 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .deadlineAlertItem strong { color: #142019; }
 .deadlineAlertItem span { width: fit-content; padding: 5px 8px; border-radius: 999px; background: #ffd75b; color: #123421; font-size: .82rem; font-weight: 900; }
 .deadlineAlertItem small { color: #617068; font-weight: 800; }
+.deadlineAlertLink { width: fit-content; color: #116530; font-size: .86rem; font-weight: 900; }
+.deadlineNotifier { display: flex; justify-content: space-between; gap: 14px; align-items: center; margin-bottom: 18px; padding: 16px 18px; border: 1px solid #dce5df; border-radius: 18px; background: linear-gradient(135deg, #ffffff 0%, #effaf1 100%); box-shadow: 0 10px 26px rgb(20 32 25 / 7%); }
+.deadlineNotifier h2 { margin: 8px 0 6px; font-size: clamp(1.1rem, 2.5vw, 1.45rem); }
+.deadlineNotifier p { margin-bottom: 0; font-weight: 800; }
+.deadlineModalOverlay { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 18px; background: rgb(5 23 16 / 48%); backdrop-filter: blur(5px); }
+.deadlineModal { position: relative; display: grid; gap: 14px; width: min(520px, 100%); padding: 24px; border: 1px solid rgb(255 255 255 / 45%); border-radius: 26px; background: linear-gradient(135deg, #ffffff 0%, #fff8df 52%, #effaf1 100%); box-shadow: 0 28px 70px rgb(5 23 16 / 32%); }
+.deadlineModal h2 { margin: 0; font-size: clamp(1.6rem, 4vw, 2.35rem); letter-spacing: -0.04em; }
+.deadlineModal p { margin-bottom: 0; font-weight: 800; line-height: 1.45; }
+.deadlineModalClose { position: absolute; top: 14px; right: 14px; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 1px solid #dce5df; border-radius: 999px; background: white; color: #617068; }
+.deadlineModalMatches { display: grid; gap: 8px; }
+.deadlineModalMatches article { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 11px 12px; border: 1px solid #e7eee9; border-radius: 14px; background: rgb(255 255 255 / 74%); }
+.deadlineModalMatches article div { display: grid; gap: 4px; min-width: 0; }
+.deadlineModalMatches strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.deadlineModalMatches small { color: #617068; font-weight: 900; }
+.deadlineModalMatchButton { flex: 0 0 auto; padding: 7px 9px; border-radius: 999px; background: #ffd75b; color: #123421; font-size: .82rem; font-weight: 900; }
+.deadlineModalActions { display: flex; flex-wrap: wrap; gap: 10px; }
+.deadlineModalReminder { width: fit-content; padding: 8px 10px; background: transparent; color: #116530; text-decoration: underline; }
 .badgeLive { display: inline-flex; gap: 7px; align-items: center; background: #dcfce7; color: #116530; }
 .livePulse { width: 8px; height: 8px; border-radius: 999px; background: #16a34a; box-shadow: 0 0 0 0 rgb(22 163 74 / 55%); animation: livePulse 1.6s ease-out infinite; }
 .matchLiveBadge { grid-column: 1 / -1; display: inline-flex; gap: 7px; align-items: center; width: fit-content; padding: 6px 10px; border: 1px solid rgb(22 163 74 / 24%); border-radius: 999px; background: #dcfce7; color: #116530; font-size: .78rem; font-weight: 900; text-decoration: none; }
@@ -491,6 +528,8 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
   .pageToolbar { align-items: flex-start; flex-direction: column; }
   .deadlineAlertsHeader { align-items: flex-start; flex-direction: column; }
   .deadlineAlertsActions { justify-content: flex-start; }
+  .deadlineNotifier { align-items: flex-start; flex-direction: column; }
+  .deadlineModalMatches article { align-items: flex-start; flex-direction: column; }
   .toolbarTips { justify-content: flex-start; }
   .stageTabs { gap: 0; justify-content: stretch; }
   .stageTab { flex: 1; min-width: 0; font-size: .75rem; }
