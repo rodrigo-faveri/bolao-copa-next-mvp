@@ -1,5 +1,5 @@
 import { auth } from "../../auth";
-import { saveKnockoutPrediction, savePrediction } from "../bolao/actions";
+import { clearKnockoutPredictions, deleteKnockoutPrediction, saveKnockoutPrediction, savePrediction } from "../bolao/actions";
 import { CupHeader } from "../../components/CupHeader";
 import { WorldCupSimulator } from "../../components/WorldCupSimulator";
 import { getCurrentLocale } from "../../lib/i18n";
@@ -38,6 +38,8 @@ export default async function SimuladorPage() {
         knockoutVariant="cards"
         locale={locale}
         saveAction={savePrediction}
+        clearKnockoutAction={clearKnockoutPredictions}
+        deleteKnockoutAction={deleteKnockoutPrediction}
         saveKnockoutAction={saveKnockoutPrediction}
         matches={matches.map((match) => {
           const prediction = predictionMap.get(match.id);

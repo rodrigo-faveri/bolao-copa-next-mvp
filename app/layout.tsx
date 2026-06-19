@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { auth } from "../auth";
+import { AiAssistantChat } from "../components/AiAssistantChat";
 import { getCurrentLocale } from "../lib/i18n";
 import "./globals.css";
 
@@ -9,11 +11,15 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const session = await auth();
   const locale = await getCurrentLocale();
 
   return (
     <html lang={locale}>
-      <body>{children}</body>
+      <body>
+        {children}
+        {session?.user?.email && <AiAssistantChat locale={locale} variant="widget" />}
+      </body>
     </html>
   );
 }

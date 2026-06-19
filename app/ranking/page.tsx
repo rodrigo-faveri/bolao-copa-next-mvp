@@ -12,6 +12,13 @@ type RankingUser = {
   id: string;
   name: string | null;
   nickname: string | null;
+  knockoutPredictions: Array<{
+    awayTeam: string | null;
+    bracketMatchId: string;
+    bracketRound: string;
+    homeTeam: string | null;
+    winnerTeam: string;
+  }>;
   predictions: Array<{
     goalsA: number;
     goalsB: number;
@@ -26,6 +33,15 @@ type RankingUser = {
       resultGoalsB: number | null;
     };
   }>;
+};
+
+type FinishedKnockoutMatch = {
+  id: string;
+  group: string;
+  resultGoalsA: number | null;
+  resultGoalsB: number | null;
+  teamA: string;
+  teamB: string;
 };
 
 type PoolRules = {
@@ -66,6 +82,35 @@ function calculateRankingPoints(
 
 function getMatchCompetitionPhase(match: { group: string }) {
   return /^[A-L]$/.test(match.group) ? "groups" as const : "knockout" as const;
+}
+
+function normalizeTeamName(team: string | null | undefined) {
+  return (team ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function findFinishedKnockoutMatch(
+  prediction: RankingUser["knockoutPredictions"][number],
+  finishedMatches: FinishedKnockoutMatch[],
+) {
+  const homeTeam = normalizeTeamName(prediction.homeTeam);
+  const awayTeam = normalizeTeamName(prediction.awayTeam);
+  if (!homeTeam || !awayTeam) return null;
+
+  return finishedMatches.find((match) => {
+    const teamA = normalizeTeamName(match.teamA);
+    const teamB = normalizeTeamName(match.teamB);
+    return (teamA === homeTeam && teamB === awayTeam) || (teamA === awayTeam && teamB === homeTeam);
+  }) ?? null;
+}
+
+function getMatchWinner(match: FinishedKnockoutMatch) {
+  if (match.resultGoalsA === null || match.resultGoalsB === null || match.resultGoalsA === match.resultGoalsB) return null;
+  return match.resultGoalsA > match.resultGoalsB ? match.teamA : match.teamB;
 }
 
 function formatUserName(user: { id: string; name: string | null; nickname: string | null }) {
@@ -140,6 +185,60 @@ function buildRankingRows(users: RankingUser[], rules: PoolRules | null = null) 
     .map((row, index) => ({ ...row, position: index + 1 }));
 }
 
+function buildKnockoutRankingRows(users: RankingUser[], finishedMatches: FinishedKnockoutMatch[], rules: PoolRules | null = null) {
+  const outcomePoints = rules?.knockoutOutcomePoints ?? rules?.outcomePoints ?? 3;
+
+  return users
+    .map((user) => {
+      const hits: RankingHit[] = [];
+      let resolvedPredictions = 0;
+      let outcomeHits = 0;
+
+      for (const prediction of user.knockoutPredictions) {
+        const officialMatch = findFinishedKnockoutMatch(prediction, finishedMatches);
+        if (!officialMatch) continue;
+        const winner = getMatchWinner(officialMatch);
+        if (!winner) continue;
+
+        resolvedPredictions += 1;
+        if (normalizeTeamName(prediction.winnerTeam) !== normalizeTeamName(winner)) continue;
+
+        outcomeHits += 1;
+        hits.push({
+          kind: "outcome",
+          matchId: prediction.bracketMatchId,
+          points: outcomePoints,
+          prediction: prediction.winnerTeam,
+          result: winner,
+          teamA: officialMatch.teamA,
+          teamB: officialMatch.teamB,
+        });
+      }
+
+      const points = outcomeHits * outcomePoints;
+
+      return {
+        accuracy: resolvedPredictions > 0 ? Math.round((outcomeHits / resolvedPredictions) * 100) : 0,
+        exactHits: 0,
+        hits,
+        name: formatUserName(user),
+        outcomeHits,
+        points,
+        position: 0,
+        predictions: user.knockoutPredictions.length,
+        userId: user.id,
+      };
+    })
+    .filter((row) => row.predictions > 0 || row.points > 0)
+    .sort((a, b) =>
+      b.points - a.points
+      || b.outcomeHits - a.outcomeHits
+      || b.predictions - a.predictions
+      || a.name.localeCompare(b.name),
+    )
+    .map((row, index) => ({ ...row, position: index + 1 }));
+}
+
 export default async function RankingPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await auth();
   const email = session?.user?.email;
@@ -150,6 +249,7 @@ export default async function RankingPage({ searchParams }: { searchParams?: Pro
   const params = await searchParams;
   const poolInviteCode = typeof params?.bolao === "string" ? params.bolao.toUpperCase() : null;
   let poolName: string | null = null;
+  let poolId: string | null = null;
   let poolRules: PoolRules | null = null;
 
   if (poolInviteCode) {
@@ -166,6 +266,7 @@ export default async function RankingPage({ searchParams }: { searchParams?: Pro
             groupStageOutcomePoints: true,
             knockoutExactScorePoints: true,
             knockoutOutcomePoints: true,
+            id: true,
             name: true,
             outcomePoints: true,
           },
@@ -174,6 +275,7 @@ export default async function RankingPage({ searchParams }: { searchParams?: Pro
     });
 
     if (!membership) redirect("/boloes");
+    poolId = membership.pool.id;
     poolName = membership.pool.name;
     poolRules = {
       exactScorePoints: membership.pool.exactScorePoints,
@@ -188,14 +290,34 @@ export default async function RankingPage({ searchParams }: { searchParams?: Pro
   const users = await prisma.user.findMany({
     where: poolInviteCode ? { poolMemberships: { some: { pool: { inviteCode: poolInviteCode } } } } : undefined,
     include: {
+      knockoutPredictions: {
+        where: { poolScope: poolId ?? "global" },
+        orderBy: [{ bracketRound: "asc" }, { updatedAt: "desc" }],
+      },
       predictions: {
         include: { match: true },
         orderBy: [{ points: "desc" }, { updatedAt: "desc" }],
       },
     },
   });
+  const finishedKnockoutMatches = await prisma.match.findMany({
+    where: {
+      group: { notIn: ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"] },
+      resultGoalsA: { not: null },
+      resultGoalsB: { not: null },
+    },
+    select: {
+      group: true,
+      id: true,
+      resultGoalsA: true,
+      resultGoalsB: true,
+      teamA: true,
+      teamB: true,
+    },
+  });
 
   const rankingRows: RankingRow[] = buildRankingRows(users, poolRules);
+  const knockoutRankingRows: RankingRow[] = buildKnockoutRankingRows(users, finishedKnockoutMatches, poolRules);
   const podium = rankingRows.slice(0, 3);
 
   return (
@@ -236,6 +358,26 @@ export default async function RankingPage({ searchParams }: { searchParams?: Pro
 
         <div className="rankingRules">
           <strong>{copy.ranking.tiebreaker}</strong> {copy.ranking.tiebreakerText}
+        </div>
+      </div>
+
+      <div className="rankingCard">
+        <div className="rankingHeader">
+          <div>
+            <span className="badge badgeGold">{copy.ranking.knockoutClassification}</span>
+            <h2>{copy.ranking.knockoutParticipants}</h2>
+          </div>
+          <span className="muted">{formatMessage(copy.ranking.playersCount, { count: knockoutRankingRows.length })}</span>
+        </div>
+
+        {knockoutRankingRows.length > 0 ? (
+          <RankingDetails locale={locale} rows={knockoutRankingRows} />
+        ) : (
+          <p className="emptyRanking muted">{copy.ranking.empty}</p>
+        )}
+
+        <div className="rankingRules">
+          <strong>{copy.ranking.tiebreaker}</strong> {copy.ranking.knockoutDescription}
         </div>
       </div>
     </main>

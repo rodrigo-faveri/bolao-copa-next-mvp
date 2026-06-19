@@ -29,6 +29,15 @@ const KnockoutPredictionSchema = z.object({
   winnerTeam: z.string().trim().min(1).max(80),
 });
 
+const DeleteKnockoutPredictionSchema = z.object({
+  bracketMatchId: z.string().trim().min(2).max(60),
+  poolInviteCode: z.string().trim().max(24).optional(),
+});
+
+const ClearKnockoutPredictionsSchema = z.object({
+  poolInviteCode: z.string().trim().max(24).optional(),
+});
+
 export async function savePrediction(formData: FormData) {
   const session = await auth();
   const email = session?.user?.email;
@@ -156,6 +165,113 @@ export async function saveKnockoutPrediction(formData: FormData) {
         poolScope,
         winnerTeam,
       },
+    });
+  });
+
+  revalidatePath("/bolao");
+  revalidatePath("/simulador");
+  revalidatePath("/ranking");
+}
+
+export async function deleteKnockoutPrediction(formData: FormData) {
+  const session = await auth();
+  const email = session?.user?.email;
+  if (!email) throw new Error("Voce precisa estar logado.");
+
+  await assertRateLimit(`knockout-delete:${email}`, predictionRateLimitMaxAttempts, predictionRateLimitWindowMs);
+
+  const result = DeleteKnockoutPredictionSchema.safeParse({
+    bracketMatchId: formData.get("bracketMatchId"),
+    poolInviteCode: formData.get("poolInviteCode") || undefined,
+  });
+  if (!result.success) throw new Error("Palpite do mata-mata invalido.");
+
+  await prisma.$transaction(async (transaction) => {
+    const user = await transaction.user.findUnique({ where: { email }, select: { id: true } });
+    if (!user) throw new Error("Usuario nao encontrado.");
+
+    let poolScope = "global";
+    const normalizedInviteCode = result.data.poolInviteCode?.toUpperCase();
+
+    if (normalizedInviteCode) {
+      const membership = await transaction.poolMember.findFirst({
+        where: {
+          pool: { inviteCode: normalizedInviteCode },
+          userId: user.id,
+        },
+        select: { pool: { select: { id: true } } },
+      });
+      if (!membership) throw new Error("Voce nao participa deste bolao.");
+      poolScope = membership.pool.id;
+    }
+
+    await transaction.knockoutPrediction.deleteMany({
+      where: {
+        bracketMatchId: result.data.bracketMatchId,
+        poolScope,
+        userId: user.id,
+      },
+    });
+
+    await createAuditLog(transaction, {
+      actorId: user.id,
+      actorEmail: email,
+      action: "knockout_prediction_deleted",
+      entity: "knockout_prediction",
+      entityId: result.data.bracketMatchId,
+      metadata: { poolScope },
+    });
+  });
+
+  revalidatePath("/bolao");
+  revalidatePath("/simulador");
+  revalidatePath("/ranking");
+}
+
+export async function clearKnockoutPredictions(formData: FormData) {
+  const session = await auth();
+  const email = session?.user?.email;
+  if (!email) throw new Error("Voce precisa estar logado.");
+
+  await assertRateLimit(`knockout-clear:${email}`, predictionRateLimitMaxAttempts, predictionRateLimitWindowMs);
+
+  const result = ClearKnockoutPredictionsSchema.safeParse({
+    poolInviteCode: formData.get("poolInviteCode") || undefined,
+  });
+  if (!result.success) throw new Error("Escopo do mata-mata invalido.");
+
+  await prisma.$transaction(async (transaction) => {
+    const user = await transaction.user.findUnique({ where: { email }, select: { id: true } });
+    if (!user) throw new Error("Usuario nao encontrado.");
+
+    let poolScope = "global";
+    const normalizedInviteCode = result.data.poolInviteCode?.toUpperCase();
+
+    if (normalizedInviteCode) {
+      const membership = await transaction.poolMember.findFirst({
+        where: {
+          pool: { inviteCode: normalizedInviteCode },
+          userId: user.id,
+        },
+        select: { pool: { select: { id: true } } },
+      });
+      if (!membership) throw new Error("Voce nao participa deste bolao.");
+      poolScope = membership.pool.id;
+    }
+
+    const deleted = await transaction.knockoutPrediction.deleteMany({
+      where: {
+        poolScope,
+        userId: user.id,
+      },
+    });
+
+    await createAuditLog(transaction, {
+      actorId: user.id,
+      actorEmail: email,
+      action: "knockout_predictions_cleared",
+      entity: "knockout_prediction",
+      metadata: { deleted: deleted.count, poolScope },
     });
   });
 

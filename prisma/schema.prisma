@@ -224,6 +224,24 @@ model ScheduledJobRun {
   @@index([startedAt])
 }
 
+model KnowledgeDocument {
+  id          String   @id @default(cuid())
+  source      String
+  sourceId    String
+  title       String
+  content     String   @db.Text
+  url         String?
+  metadata    Json?
+  embedding   Json?
+  contentHash String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([source, sourceId])
+  @@index([source])
+  @@index([updatedAt])
+}
+
 model Pool {
   id          String       @id @default(cuid())
   name        String
