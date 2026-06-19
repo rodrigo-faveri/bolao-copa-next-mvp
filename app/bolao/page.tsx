@@ -11,7 +11,7 @@ import { isPredictionOpen, PREDICTION_CLOSE_MINUTES } from "../../lib/prediction
 import { prisma } from "../../lib/prisma";
 import { allowUnscheduledPredictions } from "../../lib/runtime-config";
 import { getMatchVenue } from "../../lib/venues";
-import { saveKnockoutPrediction, savePrediction } from "./actions";
+import { clearKnockoutPredictions, deleteKnockoutPrediction, saveKnockoutPrediction, savePrediction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -148,6 +148,8 @@ export default async function BolaoPage({ searchParams }: { searchParams?: Promi
           knockoutVariant="cards"
           locale={locale}
           saveAction={savePrediction}
+          clearKnockoutAction={clearKnockoutPredictions}
+          deleteKnockoutAction={deleteKnockoutPrediction}
           saveKnockoutAction={saveKnockoutPrediction}
           showStandings={false}
           matches={matches.map((match) => {

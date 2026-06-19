@@ -330,6 +330,8 @@ function shortTeamName(team: string) {
 
 export function WorldCupSimulator({
   canSave,
+  clearKnockoutAction,
+  deleteKnockoutAction,
   enableKnockout = false,
   focusMatchId,
   initialKnockoutWinners = {},
@@ -342,6 +344,8 @@ export function WorldCupSimulator({
   showStandings = true,
 }: {
   canSave: boolean;
+  clearKnockoutAction?: (formData: FormData) => void | Promise<void>;
+  deleteKnockoutAction?: (formData: FormData) => void | Promise<void>;
   enableKnockout?: boolean;
   focusMatchId?: string | null;
   initialKnockoutWinners?: Record<string, string>;
@@ -417,6 +421,12 @@ export function WorldCupSimulator({
     return bracketRounds.find((round) => round.matches.some((match) => match.id === matchId)) ?? selectedKnockoutRound;
   }
 
+  function buildKnockoutScopeFormData() {
+    const formData = new FormData();
+    if (knockoutPoolInviteCode) formData.set("poolInviteCode", knockoutPoolInviteCode);
+    return formData;
+  }
+
   function focusMatch(matchId: string) {
     const targetGroup = groups.find((item) => item.rounds.some((round) => round.some((match) => match.id === matchId)));
     if (!targetGroup) return;
@@ -453,6 +463,29 @@ export function WorldCupSimulator({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groups]);
 
+  useEffect(() => {
+    function handleApplyPick(event: Event) {
+      const detail = (event as CustomEvent<{ goalsA?: number; goalsB?: number; matchId?: string }>).detail;
+      const goalsA = detail?.goalsA;
+      const goalsB = detail?.goalsB;
+      if (
+        !detail?.matchId
+        || typeof goalsA !== "number"
+        || typeof goalsB !== "number"
+        || !Number.isInteger(goalsA)
+        || !Number.isInteger(goalsB)
+      ) return;
+
+      applyAiPick(detail.matchId, goalsA, goalsB);
+      lastFocusedMatch.current = detail.matchId;
+      focusMatch(detail.matchId);
+    }
+
+    window.addEventListener("bolao:apply-pick", handleApplyPick);
+    return () => window.removeEventListener("bolao:apply-pick", handleApplyPick);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups]);
+
   async function chooseWinner(match: BracketMatch, team?: string) {
     if (!team) return;
     if (![match.home.team, match.away.team].includes(team)) return;
@@ -476,6 +509,49 @@ export function WorldCupSimulator({
     try {
       await saveKnockoutAction(formData);
       showTemporarySaveFeedback(feedbackKey, { status: "saved", message: copy.simulator.saved });
+    } catch (error) {
+      showTemporarySaveFeedback(feedbackKey, {
+        status: "error",
+        message: error instanceof Error ? error.message : copy.simulator.saveError,
+      });
+    }
+  }
+
+  async function removeWinner(match: BracketMatch) {
+    setKnockoutWinners((current) => {
+      const next = { ...current };
+      delete next[match.id];
+      return next;
+    });
+    if (!canSave || !deleteKnockoutAction) return;
+
+    const feedbackKey = `knockout:${match.id}`;
+    setSaveFeedbackByMatch((current) => ({ ...current, [feedbackKey]: { status: "saving" } }));
+
+    const formData = buildKnockoutScopeFormData();
+    formData.set("bracketMatchId", match.id);
+
+    try {
+      await deleteKnockoutAction(formData);
+      showTemporarySaveFeedback(feedbackKey, { status: "saved", message: copy.simulator.knockoutPickRemoved });
+    } catch (error) {
+      showTemporarySaveFeedback(feedbackKey, {
+        status: "error",
+        message: error instanceof Error ? error.message : copy.simulator.saveError,
+      });
+    }
+  }
+
+  async function clearKnockoutWinners() {
+    setKnockoutWinners({});
+    if (!canSave || !clearKnockoutAction) return;
+
+    const feedbackKey = "knockout:clear";
+    setSaveFeedbackByMatch((current) => ({ ...current, [feedbackKey]: { status: "saving" } }));
+
+    try {
+      await clearKnockoutAction(buildKnockoutScopeFormData());
+      showTemporarySaveFeedback(feedbackKey, { status: "saved", message: copy.simulator.knockoutPicksCleared });
     } catch (error) {
       showTemporarySaveFeedback(feedbackKey, {
         status: "error",
@@ -656,7 +732,14 @@ export function WorldCupSimulator({
             </button>
           ))}
         </div>
-        <p className="muted">{selectedWinner ? formatMessage(copy.simulator.pickAdvances, { team: teamLabel(selectedWinner, locale) }) : copy.simulator.chooseAdvances}</p>
+        <div className="knockoutCardFooter">
+          <p className="muted">{selectedWinner ? formatMessage(copy.simulator.pickAdvances, { team: teamLabel(selectedWinner, locale) }) : copy.simulator.chooseAdvances}</p>
+          {selectedWinner && (
+            <button className="textButton" onClick={() => removeWinner(match)} type="button">
+              {copy.simulator.removeKnockoutPick}
+            </button>
+          )}
+        </div>
         {saveFeedback.status === "saving" && <div className="matchSaveFeedback" role="status">{copy.simulator.saving}</div>}
         {saveFeedback.status === "saved" && <div className="matchSaveFeedback matchSaveSuccess" role="status">{saveFeedback.message}</div>}
         {saveFeedback.status === "error" && <div className="matchSaveFeedback matchSaveError" role="alert">{saveFeedback.message}</div>}
@@ -665,6 +748,7 @@ export function WorldCupSimulator({
   }
 
   const [roundOf32, roundOf16, quarterFinals, semiFinals, finalRound] = bracketRounds;
+  const knockoutClearFeedback = saveFeedbackByMatch["knockout:clear"] ?? { status: "idle" };
 
   return (
     <div className="simulatorShell">
@@ -822,7 +906,12 @@ export function WorldCupSimulator({
               <h2>{showStandings ? copy.simulator.bracketTitle : copy.simulator.knockoutPicksTitle}</h2>
               <p>{showStandings ? copy.simulator.bracketDescription : copy.simulator.knockoutPicksDescription}</p>
             </div>
-            <button className="buttonSecondary" onClick={() => setKnockoutWinners({})} type="button">{copy.simulator.cleanBracket}</button>
+            <div className="knockoutIntroActions">
+              <button className="buttonSecondary" onClick={clearKnockoutWinners} type="button">{copy.simulator.cleanBracket}</button>
+              {knockoutClearFeedback.status === "saving" && <span className="muted">{copy.simulator.saving}</span>}
+              {knockoutClearFeedback.status === "saved" && <span className="matchSaveSuccess">{knockoutClearFeedback.message}</span>}
+              {knockoutClearFeedback.status === "error" && <span className="matchSaveError">{knockoutClearFeedback.message}</span>}
+            </div>
           </div>
 
           {renderKnockoutPhaseTabs()}

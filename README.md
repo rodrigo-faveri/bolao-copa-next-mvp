@@ -10,6 +10,7 @@ App recreativo para palpites da Copa do Mundo de 2026 entre amigos, sem dinheiro
 - Prisma + PostgreSQL
 - Zod para validacao
 - OpenRouter opcional para sugestoes de IA
+- LangChain + LangGraph para orquestracao do assistente IA
 
 ## Recursos
 
@@ -36,15 +37,18 @@ App recreativo para palpites da Copa do Mundo de 2026 entre amigos, sem dinheiro
 - Simulador de fase de grupos com classificacao em tempo real.
 - Simulador de mata-mata por etapas.
 - Palpites do mata-mata persistidos no banco, inclusive por bolao privado.
+- Palpites do mata-mata podem ser removidos individualmente ou limpos de uma vez.
 - Home com jogos ao vivo/proximos jogos e carrossel de noticias.
 - Pagina de noticias com filtros.
 - Painel admin para registrar resultados e recalcular pontos.
 - Boloes privados com codigo/link de convite.
 - Regras de pontuacao por fase do bolao privado: fase de grupos e mata-mata.
 - Ranking filtrado por bolao privado.
+- Ranking especifico do mata-mata por acerto de selecao classificada.
 - Pagina detalhada do bolao com membros e controles do dono.
 - Contexto de bolao privado na pagina de palpites com atalhos para ranking/detalhes.
 - Assistente de IA por partida usando OpenRouter, com fallback local gratuito.
+- Assistente IA em widget flutuante, com LangGraph, OpenRouter e RAG hibrido usando base de conhecimento, partidas, palpites, resultados, ranking e noticias recentes como contexto.
 - Auditoria em banco para eventos sensiveis.
 - Headers de seguranca no Next.js.
 - Rate limit para salvar palpites e consultar IA.
@@ -422,5 +426,5 @@ npm run test:integration
 
 ## Proximas Evolucoes
 
-- Permitir excluir ou limpar palpites persistidos do mata-mata.
-- Exibir ranking e pontuacao especificos dos palpites do mata-mata.
+- Ativar embeddings reais na tabela `KnowledgeDocument` quando houver volume maior de documentos.
+- Adicionar ferramentas agenticas para executar acoes, como abrir jogo especifico, montar alerta ou salvar rascunho de palpite.
