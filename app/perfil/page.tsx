@@ -4,13 +4,15 @@ import { CupHeader } from "../../components/CupHeader";
 import { getCurrentLocale } from "../../lib/i18n";
 import { formatMessage, t } from "../../lib/i18n-shared";
 import { prisma } from "../../lib/prisma";
-import { saveProfile } from "./actions";
+import { getTeamDisplayName } from "../../lib/teams";
+import { saveNotificationPreferences, saveProfile } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 const avatarColors = ["#116530", "#0f766e", "#1d4ed8", "#7a4d00", "#9a3412", "#6d28d9"] as const;
 
 type PredictionWithMatch = Awaited<ReturnType<typeof getUserProfileData>>["predictions"][number];
+type NotificationLogWithMatch = Awaited<ReturnType<typeof getUserProfileData>>["pushNotificationLogs"][number];
 
 async function getUserProfileData(email: string) {
   const user = await prisma.user.findUnique({
@@ -20,9 +22,27 @@ async function getUserProfileData(email: string) {
       name: true,
       nickname: true,
       avatarColor: true,
+      notifyPickDeadlines: true,
+      notifyResults: true,
+      notifyRoundSummary: true,
+      notificationLeadMinutes: true,
       predictions: {
         include: { match: true },
         orderBy: { updatedAt: "desc" },
+      },
+      pushNotificationLogs: {
+        include: {
+          match: {
+            select: {
+              group: true,
+              startsAt: true,
+              teamA: true,
+              teamB: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 20,
       },
     },
   });
@@ -95,6 +115,21 @@ function buildProfileStats(predictions: PredictionWithMatch[], roundHistory: Ret
   };
 }
 
+function notificationFallbackTitle(kind: string, copy: ReturnType<typeof t>["profile"]) {
+  if (kind === "pick_deadline") return copy.notificationKindPickDeadline;
+  if (kind === "match_result") return copy.notificationKindMatchResult;
+  if (kind.startsWith("round_summary")) return copy.notificationKindRoundSummary;
+  return copy.notificationKindGeneric;
+}
+
+function notificationFallbackBody(log: NotificationLogWithMatch, copy: ReturnType<typeof t>["profile"]) {
+  const matchLabel = `${getTeamDisplayName(log.match.teamA)} x ${getTeamDisplayName(log.match.teamB)}`;
+  if (log.kind === "pick_deadline") return formatMessage(copy.notificationFallbackPickDeadline, { match: matchLabel });
+  if (log.kind === "match_result") return formatMessage(copy.notificationFallbackMatchResult, { match: matchLabel });
+  if (log.kind.startsWith("round_summary")) return formatMessage(copy.notificationFallbackRoundSummary, { group: log.match.group });
+  return matchLabel;
+}
+
 export default async function PerfilPage() {
   const session = await auth();
   const email = session?.user?.email;
@@ -109,6 +144,7 @@ export default async function PerfilPage() {
   const totalPoints = user.predictions.reduce((sum, prediction) => sum + prediction.points, 0);
   const roundHistory = buildRoundHistory(user.predictions);
   const stats = buildProfileStats(user.predictions, roundHistory);
+  const notificationDateFormatter = new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" });
 
   return (
     <main className="container bolaoPage">
@@ -166,6 +202,70 @@ export default async function PerfilPage() {
             </fieldset>
             <button type="submit">{copy.profile.save}</button>
           </form>
+        </article>
+
+        <article className="profileCard">
+          <span className="badge badgeGold">{copy.profile.notifications}</span>
+          <h2>{copy.profile.notificationPreferences}</h2>
+          <p className="muted">{copy.profile.notificationDescription}</p>
+
+          <form action={saveNotificationPreferences} className="profileForm">
+            <label className="notificationToggle">
+              <input defaultChecked={user.notifyPickDeadlines} name="notifyPickDeadlines" type="checkbox" />
+              <span>
+                <strong>{copy.profile.pickDeadlineNotifications}</strong>
+                <small>{copy.profile.pickDeadlineNotificationsText}</small>
+              </span>
+            </label>
+
+            <label className="notificationToggle">
+              <input defaultChecked={user.notifyResults} name="notifyResults" type="checkbox" />
+              <span>
+                <strong>{copy.profile.resultNotifications}</strong>
+                <small>{copy.profile.resultNotificationsText}</small>
+              </span>
+            </label>
+
+            <label className="notificationToggle">
+              <input defaultChecked={user.notifyRoundSummary} name="notifyRoundSummary" type="checkbox" />
+              <span>
+                <strong>{copy.profile.roundSummaryNotifications}</strong>
+                <small>{copy.profile.roundSummaryNotificationsText}</small>
+              </span>
+            </label>
+
+            <label>
+              <span>{copy.profile.leadTime}</span>
+              <select defaultValue={user.notificationLeadMinutes} name="notificationLeadMinutes">
+                <option value="30">{copy.profile.lead30}</option>
+                <option value="60">{copy.profile.lead60}</option>
+                <option value="120">{copy.profile.lead120}</option>
+              </select>
+            </label>
+
+            <button type="submit">{copy.profile.saveNotifications}</button>
+          </form>
+        </article>
+
+        <article className="profileCard">
+          <span className="badge badgeGold">{copy.profile.notificationHistory}</span>
+          <h2>{copy.profile.notificationHistoryTitle}</h2>
+          {user.pushNotificationLogs.length > 0 ? (
+            <div className="notificationHistory">
+              {user.pushNotificationLogs.map((log) => (
+                <article className="notificationHistoryItem" key={log.id}>
+                  <div>
+                    <strong>{log.title ?? notificationFallbackTitle(log.kind, copy.profile)}</strong>
+                    <p>{log.body ?? notificationFallbackBody(log, copy.profile)}</p>
+                    <small>{notificationDateFormatter.format(log.createdAt)}</small>
+                  </div>
+                  {log.url && <a className="buttonLink buttonSecondary" href={log.url}>{copy.profile.notificationHistoryLink}</a>}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="muted">{copy.profile.emptyNotificationHistory}</p>
+          )}
         </article>
 
         <article className="profileCard">

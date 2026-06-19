@@ -18,9 +18,17 @@ const checkedEnvNames = [
   "OPENROUTER_API_KEY",
   "API_FOOTBALL_KEY",
   "MONITORING_WEBHOOK_URL",
+  "OBSERVABILITY_PROVIDER",
+  "OBSERVABILITY_ENDPOINT_URL",
+  "OBSERVABILITY_API_KEY",
+  "OBSERVABILITY_SERVICE_NAME",
   "VAPID_PUBLIC_KEY",
   "VAPID_PRIVATE_KEY",
   "VAPID_SUBJECT",
+  "JOB_RUNNING_STALE_MINUTES",
+  "JOB_RESULT_SYNC_STALE_MINUTES",
+  "JOB_PUSH_REMINDER_STALE_MINUTES",
+  "JOB_RESULT_PUSH_STALE_MINUTES",
 ];
 
 function getEnvFileArg() {
@@ -225,17 +233,36 @@ if (configuredVapidValues === 0) {
   warnings.push("VAPID keys are empty. Push notifications outside the browser will be disabled.");
 }
 
-if (process.env.MONITORING_WEBHOOK_URL) {
+const observabilityProvider = (process.env.OBSERVABILITY_PROVIDER || (process.env.MONITORING_WEBHOOK_URL ? "webhook" : "")).toLowerCase();
+if (observabilityProvider && !["off", "webhook", "logtail", "datadog", "sentry"].includes(observabilityProvider)) {
+  errors.push("OBSERVABILITY_PROVIDER must be off, webhook, logtail, datadog or sentry.");
+}
+
+const observabilityUrl = process.env.OBSERVABILITY_ENDPOINT_URL || process.env.MONITORING_WEBHOOK_URL;
+if (observabilityUrl) {
   try {
-    const monitoringUrl = new URL(process.env.MONITORING_WEBHOOK_URL);
+    const monitoringUrl = new URL(observabilityUrl);
     if (!["https:", "http:"].includes(monitoringUrl.protocol)) {
-      errors.push("MONITORING_WEBHOOK_URL must use http:// or https://.");
+      errors.push("OBSERVABILITY_ENDPOINT_URL/MONITORING_WEBHOOK_URL must use http:// or https://.");
     }
   } catch {
-    errors.push("MONITORING_WEBHOOK_URL must be a valid URL.");
+    errors.push("OBSERVABILITY_ENDPOINT_URL/MONITORING_WEBHOOK_URL must be a valid URL.");
   }
 } else {
-  warnings.push("MONITORING_WEBHOOK_URL is empty. External error monitoring is disabled.");
+  warnings.push("No observability endpoint configured. External error monitoring is disabled.");
+}
+
+if (["logtail", "datadog"].includes(observabilityProvider) && !process.env.OBSERVABILITY_API_KEY) {
+  warnings.push("OBSERVABILITY_API_KEY is empty. Logtail/Datadog ingestion may reject logs.");
+}
+
+for (const name of ["JOB_RUNNING_STALE_MINUTES", "JOB_RESULT_SYNC_STALE_MINUTES", "JOB_PUSH_REMINDER_STALE_MINUTES", "JOB_RESULT_PUSH_STALE_MINUTES"]) {
+  const value = process.env[name];
+  if (!value) continue;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    errors.push(`${name} must be a positive integer when configured.`);
+  }
 }
 
 for (const warning of warnings) {

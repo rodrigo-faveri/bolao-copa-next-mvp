@@ -23,12 +23,17 @@ const PoolIdSchema = z.object({
 
 const PoolRulesSchema = z.object({
   poolId: z.string().cuid(),
-  exactScorePoints: z.coerce.number().int().min(1).max(20),
-  outcomePoints: z.coerce.number().int().min(0).max(20),
+  groupStageExactScorePoints: z.coerce.number().int().min(1).max(20),
+  groupStageOutcomePoints: z.coerce.number().int().min(0).max(20),
+  knockoutExactScorePoints: z.coerce.number().int().min(1).max(30),
+  knockoutOutcomePoints: z.coerce.number().int().min(0).max(30),
   mode: z.enum(["friends", "family", "competitive"]),
-}).refine((data) => data.exactScorePoints >= data.outcomePoints, {
-  message: "Placar exato precisa valer pelo menos o mesmo que resultado certo.",
-  path: ["exactScorePoints"],
+}).refine((data) => data.groupStageExactScorePoints >= data.groupStageOutcomePoints, {
+  message: "Placar exato da fase de grupos precisa valer pelo menos o mesmo que resultado certo.",
+  path: ["groupStageExactScorePoints"],
+}).refine((data) => data.knockoutExactScorePoints >= data.knockoutOutcomePoints, {
+  message: "Placar exato do mata-mata precisa valer pelo menos o mesmo que resultado certo.",
+  path: ["knockoutExactScorePoints"],
 });
 
 const RemoveMemberSchema = z.object({
@@ -177,8 +182,10 @@ export async function updatePoolRules(formData: FormData) {
 
   const result = PoolRulesSchema.safeParse({
     poolId: formData.get("poolId"),
-    exactScorePoints: formData.get("exactScorePoints"),
-    outcomePoints: formData.get("outcomePoints"),
+    groupStageExactScorePoints: formData.get("groupStageExactScorePoints"),
+    groupStageOutcomePoints: formData.get("groupStageOutcomePoints"),
+    knockoutExactScorePoints: formData.get("knockoutExactScorePoints"),
+    knockoutOutcomePoints: formData.get("knockoutOutcomePoints"),
     mode: formData.get("mode"),
   });
   if (!result.success) throw new Error("Regras do bolao invalidas.");
@@ -189,8 +196,12 @@ export async function updatePoolRules(formData: FormData) {
     const updated = await transaction.pool.update({
       where: { id: result.data.poolId },
       data: {
-        exactScorePoints: result.data.exactScorePoints,
-        outcomePoints: result.data.outcomePoints,
+        exactScorePoints: result.data.groupStageExactScorePoints,
+        outcomePoints: result.data.groupStageOutcomePoints,
+        groupStageExactScorePoints: result.data.groupStageExactScorePoints,
+        groupStageOutcomePoints: result.data.groupStageOutcomePoints,
+        knockoutExactScorePoints: result.data.knockoutExactScorePoints,
+        knockoutOutcomePoints: result.data.knockoutOutcomePoints,
         mode: result.data.mode,
       },
       select: {
@@ -198,6 +209,10 @@ export async function updatePoolRules(formData: FormData) {
         inviteCode: true,
         exactScorePoints: true,
         outcomePoints: true,
+        groupStageExactScorePoints: true,
+        groupStageOutcomePoints: true,
+        knockoutExactScorePoints: true,
+        knockoutOutcomePoints: true,
         mode: true,
       },
     });
@@ -211,6 +226,10 @@ export async function updatePoolRules(formData: FormData) {
       metadata: {
         exactScorePoints: updated.exactScorePoints,
         outcomePoints: updated.outcomePoints,
+        groupStageExactScorePoints: updated.groupStageExactScorePoints,
+        groupStageOutcomePoints: updated.groupStageOutcomePoints,
+        knockoutExactScorePoints: updated.knockoutExactScorePoints,
+        knockoutOutcomePoints: updated.knockoutOutcomePoints,
         mode: updated.mode,
       },
     });

@@ -142,6 +142,8 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .poolForm input { width: 100%; text-align: left; }
 .poolRulesForm { margin-top: 4px; padding-top: 14px; border-top: 1px solid #e7eee9; }
 .poolRulesForm input[type="number"] { text-align: center; }
+.poolRulesFieldset { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 12px; border: 1px solid #e7eee9; border-radius: 14px; background: #f8fbf9; }
+.poolRulesFieldset legend { grid-column: 1 / -1; padding: 0 6px; color: #116530; font-size: .82rem; font-weight: 900; text-transform: uppercase; }
 .poolRulesSummary { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; }
 .poolRulesSummary span { padding: 6px 9px; border: 1px solid #dce5df; border-radius: 999px; background: #f8fbf9; color: #617068; font-size: .78rem; font-weight: 900; }
 .poolListCard { overflow: hidden; }
@@ -191,7 +193,7 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .adminResultForm { display: grid; grid-template-columns: minmax(160px, 1fr) auto minmax(160px, 1fr) auto; gap: 12px; align-items: end; padding-top: 12px; border-top: 1px solid #e7eee9; }
 .adminResultForm label { display: grid; gap: 6px; color: #617068; font-size: .82rem; font-weight: 900; }
 .adminResultForm input { width: 100%; }
-.profileGrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, .8fr); gap: 16px; }
+.profileGrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, .8fr); gap: 16px; align-items: start; }
 .profileCard { display: grid; gap: 18px; padding: 22px; border: 1px solid #dce5df; border-radius: 22px; background: white; box-shadow: 0 12px 34px rgb(20 32 25 / 8%); }
 .profilePreview { display: flex; gap: 16px; align-items: center; }
 .profileAvatar { display: grid; place-items: center; width: 76px; height: 76px; flex: 0 0 auto; border-radius: 999px; color: white; font-size: 2rem; font-weight: 900; box-shadow: inset 0 0 0 4px rgb(255 255 255 / 32%), 0 14px 28px rgb(20 32 25 / 18%); }
@@ -205,8 +207,21 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .profileForm { display: grid; gap: 14px; }
 .profileForm label, .profileForm fieldset { display: grid; gap: 8px; color: #617068; font-size: .82rem; font-weight: 900; text-transform: uppercase; }
 .profileForm input[type="text"] { width: 100%; max-width: 380px; text-align: left; }
+.profileForm select { width: min(100%, 260px); }
 .profileForm fieldset { margin: 0; padding: 0; border: 0; }
 .profileForm legend { margin-bottom: 8px; padding: 0; }
+.notificationToggle { grid-template-columns: auto 1fr; align-items: start; padding: 14px; border: 1px solid #e7eee9; border-radius: 16px; background: #f8fbf9; text-transform: none !important; }
+.notificationToggle input { margin-top: 4px; width: 18px; height: 18px; accent-color: #116530; }
+.notificationToggle span { display: grid; gap: 4px; }
+.notificationToggle strong { color: #142019; font-size: .98rem; }
+.notificationToggle small { color: #617068; font-size: .82rem; line-height: 1.35; }
+.notificationHistory { display: grid; gap: 10px; }
+.notificationHistoryItem { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 13px; border: 1px solid #e7eee9; border-radius: 16px; background: linear-gradient(135deg, #fbfdfb 0%, #fffaf0 100%); }
+.notificationHistoryItem div { display: grid; gap: 5px; min-width: 0; }
+.notificationHistoryItem strong { color: #116530; }
+.notificationHistoryItem p { margin: 0; color: #34433a; font-size: .92rem; line-height: 1.35; }
+.notificationHistoryItem small { color: #7a837d; font-weight: 800; }
+.notificationHistoryItem .buttonLink { white-space: nowrap; }
 .avatarColorGrid { display: flex; flex-wrap: wrap; gap: 9px; }
 .avatarColorGrid label { display: block; cursor: pointer; }
 .avatarColorGrid input { position: absolute; opacity: 0; pointer-events: none; }
@@ -363,6 +378,11 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .adminSyncStatusRunning strong { color: #8a5b12; }
 .adminSyncMetrics { display: flex; flex-wrap: wrap; gap: 8px; }
 .adminSyncMetrics span { padding: 8px 11px; border-radius: 999px; background: #effaf1; color: #116530; font-size: .86rem; font-weight: 900; }
+.adminJobHealthGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.adminJobHealthGrid article { display: grid; gap: 8px; padding: 14px; border: 1px solid #e7eee9; border-radius: 16px; background: #f8fbf9; }
+.adminJobHealthGrid span { color: #617068; font-size: .78rem; font-weight: 900; text-transform: uppercase; }
+.adminJobHealthGrid strong { color: #116530; font-size: 1.08rem; }
+.adminJobHealthGrid small { color: #617068; font-weight: 800; }
 .adminSyncError { margin: 0; padding: 10px 12px; border: 1px solid #fecaca; border-radius: 12px; background: #fff1f2; color: #9a3412; font-weight: 800; }
 .adminSyncWarning { margin: 0; padding: 10px 12px; border: 1px solid #f1cf5a; border-radius: 12px; background: #fff8df; color: #8a5b12; font-weight: 800; }
 .adminSyncAlerts { display: grid; gap: 8px; }
@@ -513,6 +533,7 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
   .adminActivityHeader { align-items: flex-start; flex-direction: column; }
   .adminSyncHeader { align-items: flex-start; flex-direction: column; }
   .adminSyncStatus { width: 100%; text-align: left; }
+  .adminJobHealthGrid { grid-template-columns: 1fr; }
   .adminSyncRun { flex-direction: column; }
   .adminActivityItem { grid-template-columns: 1fr; }
   .adminActivityItem time { white-space: normal; }

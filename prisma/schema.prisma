@@ -18,8 +18,13 @@ model User {
   accounts      Account[]
   sessions      Session[]
   predictions   Prediction[]
+  knockoutPredictions KnockoutPrediction[]
   pushSubscriptions PushSubscription[]
   pushNotificationLogs PushNotificationLog[]
+  notifyPickDeadlines Boolean @default(true)
+  notifyResults Boolean @default(true)
+  notifyRoundSummary Boolean @default(true)
+  notificationLeadMinutes Int @default(60)
   createdPools  Pool[]       @relation("PoolCreator")
   poolMemberships PoolMember[]
   createdAt     DateTime     @default(now())
@@ -47,6 +52,9 @@ model PushNotificationLog {
   userId    String
   matchId   String
   kind      String
+  title     String?
+  body      String?
+  url       String?
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
@@ -147,6 +155,30 @@ model Prediction {
   @@index([matchId])
 }
 
+model KnockoutPrediction {
+  id             String   @id @default(cuid())
+  userId         String
+  poolId         String?
+  poolScope      String   @default("global")
+  bracketRound   String
+  bracketMatchId String
+  homeLabel      String
+  awayLabel      String
+  homeTeam       String?
+  awayTeam       String?
+  winnerTeam     String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pool           Pool?    @relation(fields: [poolId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, poolScope, bracketMatchId])
+  @@index([userId])
+  @@index([poolId])
+  @@index([poolScope])
+  @@index([bracketRound])
+}
+
 model AuditLog {
   id         String   @id @default(cuid())
   actorId    String?
@@ -178,16 +210,35 @@ model ResultSyncRun {
   @@index([startedAt])
 }
 
+model ScheduledJobRun {
+  id           String    @id @default(cuid())
+  jobName      String
+  status       String
+  details      Json?
+  errorMessage String?
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+
+  @@index([jobName])
+  @@index([status])
+  @@index([startedAt])
+}
+
 model Pool {
   id          String       @id @default(cuid())
   name        String
   inviteCode  String       @unique
   exactScorePoints Int      @default(5)
   outcomePoints    Int      @default(3)
+  groupStageExactScorePoints Int @default(5)
+  groupStageOutcomePoints    Int @default(3)
+  knockoutExactScorePoints   Int @default(8)
+  knockoutOutcomePoints      Int @default(4)
   mode        String       @default("friends")
   createdById String?
   createdBy   User?        @relation("PoolCreator", fields: [createdById], references: [id], onDelete: SetNull)
   members     PoolMember[]
+  knockoutPredictions KnockoutPrediction[]
   createdAt   DateTime     @default(now())
 
   @@index([createdById])

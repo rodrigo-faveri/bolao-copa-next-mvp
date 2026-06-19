@@ -35,10 +35,12 @@ App recreativo para palpites da Copa do Mundo de 2026 entre amigos, sem dinheiro
 - Historico de desempenho do usuario por rodada.
 - Simulador de fase de grupos com classificacao em tempo real.
 - Simulador de mata-mata por etapas.
+- Palpites do mata-mata persistidos no banco, inclusive por bolao privado.
 - Home com jogos ao vivo/proximos jogos e carrossel de noticias.
 - Pagina de noticias com filtros.
 - Painel admin para registrar resultados e recalcular pontos.
 - Boloes privados com codigo/link de convite.
+- Regras de pontuacao por fase do bolao privado: fase de grupos e mata-mata.
 - Ranking filtrado por bolao privado.
 - Pagina detalhada do bolao com membros e controles do dono.
 - Contexto de bolao privado na pagina de palpites com atalhos para ranking/detalhes.
@@ -46,8 +48,12 @@ App recreativo para palpites da Copa do Mundo de 2026 entre amigos, sem dinheiro
 - Auditoria em banco para eventos sensiveis.
 - Headers de seguranca no Next.js.
 - Rate limit para salvar palpites e consultar IA.
-- Push notifications reais opcionais para avisos fora do navegador.
-- Monitoramento externo opcional via webhook para logs de erro.
+- Push notifications reais opcionais, com preferencias por usuario no perfil.
+- Notificacoes push de resultado final e resumo de desempenho da rodada.
+- Historico de notificacoes recebidas no perfil do usuario.
+- Dashboard admin de saude dos jobs agendados.
+- Alertas automaticos no admin quando jobs falham, travam ou ficam muito tempo sem executar.
+- Monitoramento externo opcional via webhook, Logtail ou Datadog para logs de erro.
 
 ## Paginas
 
@@ -58,7 +64,7 @@ App recreativo para palpites da Copa do Mundo de 2026 entre amigos, sem dinheiro
 - `/simulador`: simulador de grupos e mata-mata.
 - `/ranking`: ranking geral ou ranking privado com `?bolao=CODIGO`.
 - `/resultados`: acompanhamento de jogos iniciados e comparacao dos palpites do usuario com placares oficiais.
-- `/perfil`: perfil publico, apelido, avatar e historico por rodada.
+- `/perfil`: perfil publico, apelido, avatar, preferencias, historico por rodada e notificacoes recebidas.
 - `/noticias`: noticias recentes com filtros por fonte, data e busca.
 - `/admin`: registro de resultados oficiais, restrito a admins.
 
@@ -133,8 +139,15 @@ VAPID_PUBLIC_KEY=""
 VAPID_PRIVATE_KEY=""
 VAPID_SUBJECT="mailto:voce@email.com"
 PUSH_REMINDER_WINDOW_MINUTES="60"
+JOB_RUNNING_STALE_MINUTES="20"
+JOB_RESULT_SYNC_STALE_MINUTES="180"
+JOB_PUSH_REMINDER_STALE_MINUTES="180"
 
 MONITORING_WEBHOOK_URL=""
+OBSERVABILITY_PROVIDER="off"
+OBSERVABILITY_ENDPOINT_URL=""
+OBSERVABILITY_API_KEY=""
+OBSERVABILITY_SERVICE_NAME="bolao-copa-next-mvp"
 
 API_FOOTBALL_KEY=""
 API_FOOTBALL_BASE_URL="https://v3.football.api-sports.io"
@@ -153,7 +166,11 @@ Notas:
 - `OPENROUTER_API_KEY` e opcional. Sem chave, o app usa sugestao local.
 - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` e `VAPID_SUBJECT` ativam Web Push real. Gere com `npx web-push generate-vapid-keys`.
 - `PUSH_REMINDER_WINDOW_MINUTES` define a janela de envio dos avisos de palpite pendente.
-- `MONITORING_WEBHOOK_URL` envia logs de erro para uma plataforma externa via HTTP POST.
+- `JOB_RUNNING_STALE_MINUTES`, `JOB_RESULT_SYNC_STALE_MINUTES` e `JOB_PUSH_REMINDER_STALE_MINUTES` controlam os alertas automaticos do dashboard admin.
+- `JOB_RESULT_PUSH_STALE_MINUTES` controla alerta de atraso do job de notificacoes de resultados.
+- `MONITORING_WEBHOOK_URL` envia logs de erro para uma plataforma externa via HTTP POST e continua disponivel como modo legado.
+- `OBSERVABILITY_PROVIDER` aceita `off`, `webhook`, `logtail`, `datadog` ou `sentry`.
+- `OBSERVABILITY_ENDPOINT_URL`, `OBSERVABILITY_API_KEY` e `OBSERVABILITY_SERVICE_NAME` configuram o destino dedicado de observabilidade.
 - `API_FOOTBALL_KEY` e opcional/legado. Sem chave, a pagina de tempo real usa dados locais.
 - `SPORTS_API_CACHE_SECONDS` controla o cache das chamadas esportivas. O padrao de 60 segundos ajuda a preservar o plano free.
 
@@ -266,9 +283,12 @@ VAPID_SUBJECT="mailto:voce@email.com"
 
 ```bash
 npm run push:pending-picks
+npm run push:results
 ```
 
-O job busca partidas cujo fechamento de palpite esta dentro de `PUSH_REMINDER_WINDOW_MINUTES`, ignora usuarios que ja palpitaram e evita duplicidade usando a tabela `PushNotificationLog`.
+O job busca partidas cujo fechamento de palpite esta dentro de uma janela maxima de lembrete, ignora usuarios que ja palpitaram, respeita as preferencias salvas em `/perfil` e evita duplicidade usando a tabela `PushNotificationLog`.
+
+O job `push:results` avisa quando um placar oficial entra, mostra os pontos do usuario naquele jogo e envia resumo de rodada quando todos os jogos daquela rodada do grupo estiverem finalizados.
 
 ## Partidas ao Vivo e Tempo Real
 
@@ -331,6 +351,7 @@ Medidas atuais:
 - Chaves de IA ficam apenas no servidor.
 - Logs estruturados em JSON para login bloqueado, admin e IA.
 - Webhook externo opcional para logs de erro via `MONITORING_WEBHOOK_URL`.
+- Observabilidade dedicada via `OBSERVABILITY_PROVIDER`, com suporte HTTP para webhook, Logtail, Datadog e endpoint customizado de Sentry/relay.
 - Tabela `AuditLog` para eventos de negocio e seguranca: palpite salvo, resultado admin salvo e tentativa admin negada.
 - Auditoria tambem registra atualizacao de perfil.
 - `npm run production:check` carrega `.env` e valida configuracoes sensiveis antes do deploy.
@@ -338,7 +359,6 @@ Medidas atuais:
 Ainda recomendado antes de producao:
 
 - revisar CSP conforme novos dominios;
-- conectar logs e erros a uma plataforma de monitoramento;
 - configurar `RATE_LIMIT_DRIVER="redis"` antes de escalar para varias instancias.
 
 ## Scripts
@@ -360,6 +380,7 @@ npm run result:set -- <matchId> <golsA> <golsB>
 npm run result:import -- data/results.csv
 npm run result:sync-serpapi
 npm run push:pending-picks
+npm run push:results
 ```
 
 ## Verificacoes
@@ -401,6 +422,5 @@ npm run test:integration
 
 ## Proximas Evolucoes
 
-- Preferencias de notificacao por usuario.
-- Dashboard de saude dos jobs agendados.
-- Melhorias de observabilidade com provedor dedicado, como Sentry, Logtail ou Datadog.
+- Permitir excluir ou limpar palpites persistidos do mata-mata.
+- Exibir ranking e pontuacao especificos dos palpites do mata-mata.

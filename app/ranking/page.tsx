@@ -21,6 +21,7 @@ type RankingUser = {
       id: string;
       teamA: string;
       teamB: string;
+      group: string;
       resultGoalsA: number | null;
       resultGoalsB: number | null;
     };
@@ -29,6 +30,10 @@ type RankingUser = {
 
 type PoolRules = {
   exactScorePoints: number;
+  groupStageExactScorePoints: number;
+  groupStageOutcomePoints: number;
+  knockoutExactScorePoints: number;
+  knockoutOutcomePoints: number;
   outcomePoints: number;
 };
 
@@ -38,18 +43,29 @@ function getOutcome(goalsA: number, goalsB: number) {
 
 function calculateRankingPoints(
   prediction: { goalsA: number; goalsB: number },
-  result: { goalsA: number; goalsB: number },
+  result: { goalsA: number; goalsB: number; phase: "groups" | "knockout" },
   rules: PoolRules | null,
 ) {
+  const exactScorePoints = result.phase === "knockout"
+    ? rules?.knockoutExactScorePoints ?? rules?.exactScorePoints ?? 5
+    : rules?.groupStageExactScorePoints ?? rules?.exactScorePoints ?? 5;
+  const outcomePoints = result.phase === "knockout"
+    ? rules?.knockoutOutcomePoints ?? rules?.outcomePoints ?? 3
+    : rules?.groupStageOutcomePoints ?? rules?.outcomePoints ?? 3;
+
   if (prediction.goalsA === result.goalsA && prediction.goalsB === result.goalsB) {
-    return rules?.exactScorePoints ?? 5;
+    return exactScorePoints;
   }
 
   if (getOutcome(prediction.goalsA, prediction.goalsB) === getOutcome(result.goalsA, result.goalsB)) {
-    return rules?.outcomePoints ?? 3;
+    return outcomePoints;
   }
 
   return 0;
+}
+
+function getMatchCompetitionPhase(match: { group: string }) {
+  return /^[A-L]$/.test(match.group) ? "groups" as const : "knockout" as const;
 }
 
 function formatUserName(user: { id: string; name: string | null; nickname: string | null }) {
@@ -70,7 +86,7 @@ function buildRankingRows(users: RankingUser[], rules: PoolRules | null = null) 
         resolvedPredictions += 1;
         const points = calculateRankingPoints(
           { goalsA: prediction.goalsA, goalsB: prediction.goalsB },
-          { goalsA: match.resultGoalsA, goalsB: match.resultGoalsB },
+          { goalsA: match.resultGoalsA, goalsB: match.resultGoalsB, phase: getMatchCompetitionPhase(match) },
           rules,
         );
         if (points <= 0) continue;
@@ -96,7 +112,7 @@ function buildRankingRows(users: RankingUser[], rules: PoolRules | null = null) 
         if (match.resultGoalsA === null || match.resultGoalsB === null) return sum;
         return sum + calculateRankingPoints(
           { goalsA: prediction.goalsA, goalsB: prediction.goalsB },
-          { goalsA: match.resultGoalsA, goalsB: match.resultGoalsB },
+          { goalsA: match.resultGoalsA, goalsB: match.resultGoalsB, phase: getMatchCompetitionPhase(match) },
           rules,
         );
       }, 0);
@@ -142,13 +158,29 @@ export default async function RankingPage({ searchParams }: { searchParams?: Pro
         user: { email },
         pool: { inviteCode: poolInviteCode },
       },
-      select: { pool: { select: { name: true, exactScorePoints: true, outcomePoints: true } } },
+      select: {
+        pool: {
+          select: {
+            exactScorePoints: true,
+            groupStageExactScorePoints: true,
+            groupStageOutcomePoints: true,
+            knockoutExactScorePoints: true,
+            knockoutOutcomePoints: true,
+            name: true,
+            outcomePoints: true,
+          },
+        },
+      },
     });
 
     if (!membership) redirect("/boloes");
     poolName = membership.pool.name;
     poolRules = {
       exactScorePoints: membership.pool.exactScorePoints,
+      groupStageExactScorePoints: membership.pool.groupStageExactScorePoints,
+      groupStageOutcomePoints: membership.pool.groupStageOutcomePoints,
+      knockoutExactScorePoints: membership.pool.knockoutExactScorePoints,
+      knockoutOutcomePoints: membership.pool.knockoutOutcomePoints,
       outcomePoints: membership.pool.outcomePoints,
     };
   }

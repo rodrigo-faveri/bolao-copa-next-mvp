@@ -14,6 +14,10 @@ const ProfileSchema = z.object({
   avatarColor: z.enum(allowedAvatarColors),
 });
 
+const NotificationPreferencesSchema = z.object({
+  notificationLeadMinutes: z.coerce.number().int().refine((value) => [30, 60, 120].includes(value)),
+});
+
 export async function saveProfile(formData: FormData) {
   const session = await auth();
   const email = session?.user?.email;
@@ -52,4 +56,48 @@ export async function saveProfile(formData: FormData) {
 
   revalidatePath("/perfil");
   revalidatePath("/ranking");
+}
+
+export async function saveNotificationPreferences(formData: FormData) {
+  const session = await auth();
+  const email = session?.user?.email;
+  if (!email) throw new Error("Voce precisa estar logado.");
+
+  await assertRateLimit(`profile:notifications:${email}`, 10, 60 * 1000);
+
+  const result = NotificationPreferencesSchema.safeParse({
+    notificationLeadMinutes: formData.get("notificationLeadMinutes"),
+  });
+  if (!result.success) throw new Error("Preferencias invalidas.");
+
+  const notifyPickDeadlines = formData.get("notifyPickDeadlines") === "on";
+
+  await prisma.$transaction(async (transaction) => {
+    const user = await transaction.user.update({
+      where: { email },
+      data: {
+        notifyPickDeadlines,
+        notifyResults: formData.get("notifyResults") === "on",
+        notifyRoundSummary: formData.get("notifyRoundSummary") === "on",
+        notificationLeadMinutes: result.data.notificationLeadMinutes,
+      },
+      select: { id: true },
+    });
+
+    await createAuditLog(transaction, {
+      actorId: user.id,
+      actorEmail: email,
+      action: "notification_preferences_updated",
+      entity: "user",
+      entityId: user.id,
+      metadata: {
+        notifyPickDeadlines,
+        notifyResults: formData.get("notifyResults") === "on",
+        notifyRoundSummary: formData.get("notifyRoundSummary") === "on",
+        notificationLeadMinutes: result.data.notificationLeadMinutes,
+      },
+    });
+  });
+
+  revalidatePath("/perfil");
 }
