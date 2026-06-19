@@ -49,6 +49,73 @@ function formatSyncStatus(status: string, locale: AppLocale) {
   return copy.admin.syncSuccess;
 }
 
+type JobRunLike = {
+  errorMessage?: string | null;
+  finishedAt: Date | null;
+  startedAt: Date;
+  status: string;
+};
+
+function minutesBetween(later: Date, earlier: Date) {
+  return Math.max(0, Math.floor((later.getTime() - earlier.getTime()) / 60000));
+}
+
+function buildJobAlert({
+  jobName,
+  now,
+  run,
+  runningStaleMinutes,
+  staleMinutes,
+  locale,
+}: {
+  jobName: string;
+  now: Date;
+  run: JobRunLike | null;
+  runningStaleMinutes: number;
+  staleMinutes: number;
+  locale: AppLocale;
+}) {
+  const copy = t(locale);
+
+  if (!run) {
+    return {
+      level: "warning" as const,
+      message: formatMessage(copy.admin.jobAlertNeverRan, { job: jobName }),
+    };
+  }
+
+  if (run.status === "failed") {
+    return {
+      level: "error" as const,
+      message: formatMessage(copy.admin.jobAlertFailed, { job: jobName, error: run.errorMessage ?? copy.admin.emptyValue }),
+    };
+  }
+
+  if (run.status === "running") {
+    const runningMinutes = minutesBetween(now, run.startedAt);
+    if (runningMinutes > runningStaleMinutes) {
+      return {
+        level: "warning" as const,
+        message: formatMessage(copy.admin.jobAlertRunningTooLong, { job: jobName, minutes: runningMinutes }),
+      };
+    }
+    return null;
+  }
+
+  const lastSeenAt = run.finishedAt ?? run.startedAt;
+  const staleForMinutes = minutesBetween(now, lastSeenAt);
+  if (staleForMinutes > staleMinutes) {
+    return {
+      level: "warning" as const,
+      message: formatMessage(copy.admin.jobAlertStale, { job: jobName, minutes: staleForMinutes }),
+    };
+  }
+
+  return null;
+}
+
+type JobHealthAlert = NonNullable<ReturnType<typeof buildJobAlert>>;
+
 function maskEmail(email: string | null, locale: AppLocale) {
   if (!email) return t(locale).common.system;
   const [name, domain] = email.split("@");
@@ -121,12 +188,22 @@ export default async function AdminPage() {
     orderBy: { startedAt: "desc" },
     take: 5,
   });
+  const scheduledJobRuns = await prisma.scheduledJobRun.findMany({
+    orderBy: { startedAt: "desc" },
+    take: 6,
+  });
 
   const finishedCount = matches.filter((match) => match.finishedAt).length;
   const latestSyncRun = syncRuns[0] ?? null;
+  const latestPushJobRun = scheduledJobRuns.find((run) => run.jobName === "push_pending_picks") ?? null;
+  const latestResultPushJobRun = scheduledJobRuns.find((run) => run.jobName === "push_results") ?? null;
   const now = new Date();
   const syncDelayMinutes = readPositiveInt("SERPAPI_RESULT_DELAY_MINUTES", 120);
   const staleSyncMinutes = readPositiveInt("SERPAPI_STALE_ALERT_MINUTES", syncDelayMinutes + 60);
+  const jobRunningStaleMinutes = readPositiveInt("JOB_RUNNING_STALE_MINUTES", 20);
+  const resultSyncJobStaleMinutes = readPositiveInt("JOB_RESULT_SYNC_STALE_MINUTES", 180);
+  const pushReminderJobStaleMinutes = readPositiveInt("JOB_PUSH_REMINDER_STALE_MINUTES", 180);
+  const resultPushJobStaleMinutes = readPositiveInt("JOB_RESULT_PUSH_STALE_MINUTES", 180);
   const staleCutoff = new Date(now.getTime() - staleSyncMinutes * 60 * 1000);
   const stalePendingMatches = matches.filter((match) =>
     match.startsAt
@@ -138,6 +215,32 @@ export default async function AdminPage() {
     .filter((match) => match.startsAt && match.resultGoalsA === null && match.resultGoalsB === null)
     .sort((a, b) => (a.startsAt?.getTime() ?? 0) - (b.startsAt?.getTime() ?? 0))
     .slice(0, 8);
+  const jobHealthAlerts = [
+    buildJobAlert({
+      jobName: copy.admin.jobResultSync,
+      locale,
+      now,
+      run: latestSyncRun,
+      runningStaleMinutes: jobRunningStaleMinutes,
+      staleMinutes: resultSyncJobStaleMinutes,
+    }),
+    buildJobAlert({
+      jobName: copy.admin.jobPushReminders,
+      locale,
+      now,
+      run: latestPushJobRun,
+      runningStaleMinutes: jobRunningStaleMinutes,
+      staleMinutes: pushReminderJobStaleMinutes,
+    }),
+    buildJobAlert({
+      jobName: copy.admin.jobResultPushes,
+      locale,
+      now,
+      run: latestResultPushJobRun,
+      runningStaleMinutes: jobRunningStaleMinutes,
+      staleMinutes: resultPushJobStaleMinutes,
+    }),
+  ].filter((alert): alert is JobHealthAlert => Boolean(alert));
 
   return (
     <main className="container bolaoPage">
@@ -208,6 +311,63 @@ export default async function AdminPage() {
                 <div>
                   <strong>{formatSyncStatus(run.status, locale)}</strong>
                   <span>{formatMessage(copy.admin.syncCandidates, { count: run.candidates })} - {formatMessage(copy.admin.syncImported, { count: run.imported })}</span>
+                </div>
+                <div>
+                  <span>{copy.admin.syncStartedAt}: {dateFormatter.format(run.startedAt)} {timeFormatter.format(run.startedAt)}</span>
+                  <span>{copy.admin.syncFinishedAt}: {run.finishedAt ? `${dateFormatter.format(run.finishedAt)} ${timeFormatter.format(run.finishedAt)}` : copy.common.loading}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="adminSyncCard">
+        <div className="adminSyncHeader">
+          <div>
+            <span className="badge badgeGold">{copy.admin.jobHealthBadge}</span>
+            <h2>{copy.admin.jobHealthTitle}</h2>
+            <p>{copy.admin.jobHealthDescription}</p>
+          </div>
+        </div>
+
+        <div className="adminJobHealthGrid">
+          <article>
+            <span>{copy.admin.jobResultSync}</span>
+            <strong>{latestSyncRun ? formatSyncStatus(latestSyncRun.status, locale) : copy.admin.syncNoRuns}</strong>
+            <small>{latestSyncRun ? `${dateFormatter.format(latestSyncRun.startedAt)} ${timeFormatter.format(latestSyncRun.startedAt)}` : copy.admin.jobNeverRan}</small>
+          </article>
+          <article>
+            <span>{copy.admin.jobPushReminders}</span>
+            <strong>{latestPushJobRun ? formatSyncStatus(latestPushJobRun.status, locale) : copy.admin.syncNoRuns}</strong>
+            <small>{latestPushJobRun ? `${dateFormatter.format(latestPushJobRun.startedAt)} ${timeFormatter.format(latestPushJobRun.startedAt)}` : copy.admin.jobNeverRan}</small>
+          </article>
+          <article>
+            <span>{copy.admin.jobResultPushes}</span>
+            <strong>{latestResultPushJobRun ? formatSyncStatus(latestResultPushJobRun.status, locale) : copy.admin.syncNoRuns}</strong>
+            <small>{latestResultPushJobRun ? `${dateFormatter.format(latestResultPushJobRun.startedAt)} ${timeFormatter.format(latestResultPushJobRun.startedAt)}` : copy.admin.jobNeverRan}</small>
+          </article>
+        </div>
+
+        <div className="adminSyncAlerts">
+          <h3>{copy.admin.jobAlertsTitle}</h3>
+          {jobHealthAlerts.length > 0 ? (
+            jobHealthAlerts.map((alert) => (
+              <p className={alert.level === "error" ? "adminSyncError" : "adminSyncWarning"} key={alert.message}>{alert.message}</p>
+            ))
+          ) : (
+            <p className="muted">{copy.admin.jobNoAlerts}</p>
+          )}
+        </div>
+
+        {scheduledJobRuns.length > 0 && (
+          <div className="adminSyncRuns">
+            <h3>{copy.admin.jobRecentRuns}</h3>
+            {scheduledJobRuns.map((run) => (
+              <article className="adminSyncRun" key={run.id}>
+                <div>
+                  <strong>{run.jobName === "push_pending_picks" ? copy.admin.jobPushReminders : run.jobName === "push_results" ? copy.admin.jobResultPushes : run.jobName}</strong>
+                  <span>{formatSyncStatus(run.status, locale)}</span>
                 </div>
                 <div>
                   <span>{copy.admin.syncStartedAt}: {dateFormatter.format(run.startedAt)} {timeFormatter.format(run.startedAt)}</span>

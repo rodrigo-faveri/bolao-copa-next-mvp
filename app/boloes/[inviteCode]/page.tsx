@@ -66,8 +66,8 @@ export default async function PoolDetailsPage({ params }: { params: Promise<{ in
             <strong>{pool.inviteCode}</strong>
             <p className="poolRulesSummary">
               <span>{getPoolModeLabel(pool.mode, copy)}</span>
-              <span>{formatMessage(copy.pools.exactRule, { points: pool.exactScorePoints })}</span>
-              <span>{formatMessage(copy.pools.outcomeRule, { points: pool.outcomePoints })}</span>
+              <span>{formatMessage(copy.pools.groupStageRule, { exact: pool.groupStageExactScorePoints, outcome: pool.groupStageOutcomePoints })}</span>
+              <span>{formatMessage(copy.pools.knockoutRule, { exact: pool.knockoutExactScorePoints, outcome: pool.knockoutOutcomePoints })}</span>
             </p>
             <input readOnly value={inviteUrl} aria-label={formatMessage(copy.pools.inviteAria, { pool: pool.name })} />
             <Link className="buttonLink" href={`/bolao?bolao=${pool.inviteCode}`}>{copy.pools.pickInPool}</Link>
@@ -101,14 +101,28 @@ export default async function PoolDetailsPage({ params }: { params: Promise<{ in
                   <option value="competitive">{copy.pools.mode_competitive}</option>
                 </select>
               </label>
-              <label>
-                <span>{copy.pools.exactScorePoints}</span>
-                <input defaultValue={pool.exactScorePoints} max={20} min={1} name="exactScorePoints" required type="number" />
-              </label>
-              <label>
-                <span>{copy.pools.outcomePoints}</span>
-                <input defaultValue={pool.outcomePoints} max={20} min={0} name="outcomePoints" required type="number" />
-              </label>
+              <fieldset className="poolRulesFieldset">
+                <legend>{copy.pools.groupStageRules}</legend>
+                <label>
+                  <span>{copy.pools.exactScorePoints}</span>
+                  <input defaultValue={pool.groupStageExactScorePoints} max={20} min={1} name="groupStageExactScorePoints" required type="number" />
+                </label>
+                <label>
+                  <span>{copy.pools.outcomePoints}</span>
+                  <input defaultValue={pool.groupStageOutcomePoints} max={20} min={0} name="groupStageOutcomePoints" required type="number" />
+                </label>
+              </fieldset>
+              <fieldset className="poolRulesFieldset">
+                <legend>{copy.pools.knockoutRules}</legend>
+                <label>
+                  <span>{copy.pools.exactScorePoints}</span>
+                  <input defaultValue={pool.knockoutExactScorePoints} max={30} min={1} name="knockoutExactScorePoints" required type="number" />
+                </label>
+                <label>
+                  <span>{copy.pools.outcomePoints}</span>
+                  <input defaultValue={pool.knockoutOutcomePoints} max={30} min={0} name="knockoutOutcomePoints" required type="number" />
+                </label>
+              </fieldset>
               <button type="submit">{copy.pools.saveRules}</button>
             </form>
           </article>

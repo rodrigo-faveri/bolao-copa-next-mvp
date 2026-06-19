@@ -1,5 +1,5 @@
 import { auth } from "../../auth";
-import { savePrediction } from "../bolao/actions";
+import { saveKnockoutPrediction, savePrediction } from "../bolao/actions";
 import { CupHeader } from "../../components/CupHeader";
 import { WorldCupSimulator } from "../../components/WorldCupSimulator";
 import { getCurrentLocale } from "../../lib/i18n";
@@ -21,7 +21,9 @@ export default async function SimuladorPage() {
     ? await prisma.user.findUnique({ where: { email: session.user.email }, select: { id: true } })
     : null;
   const predictions = user ? await prisma.prediction.findMany({ where: { userId: user.id } }) : [];
+  const knockoutPredictions = user ? await prisma.knockoutPrediction.findMany({ where: { poolScope: "global", userId: user.id } }) : [];
   const predictionMap = new Map(predictions.map((prediction) => [prediction.matchId, prediction]));
+  const knockoutWinnerMap = Object.fromEntries(knockoutPredictions.map((prediction) => [prediction.bracketMatchId, prediction.winnerTeam]));
 
   return (
     <main className="container bolaoPage">
@@ -32,9 +34,11 @@ export default async function SimuladorPage() {
       <WorldCupSimulator
         canSave={canSave}
         enableKnockout
+        initialKnockoutWinners={knockoutWinnerMap}
         knockoutVariant="cards"
         locale={locale}
         saveAction={savePrediction}
+        saveKnockoutAction={saveKnockoutPrediction}
         matches={matches.map((match) => {
           const prediction = predictionMap.get(match.id);
           return {

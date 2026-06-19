@@ -11,7 +11,7 @@ import { isPredictionOpen, PREDICTION_CLOSE_MINUTES } from "../../lib/prediction
 import { prisma } from "../../lib/prisma";
 import { allowUnscheduledPredictions } from "../../lib/runtime-config";
 import { getMatchVenue } from "../../lib/venues";
-import { savePrediction } from "./actions";
+import { saveKnockoutPrediction, savePrediction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +50,7 @@ export default async function BolaoPage({ searchParams }: { searchParams?: Promi
   const params = await searchParams;
   const poolInviteCode = typeof params?.bolao === "string" ? params.bolao.toUpperCase() : null;
   const focusMatchId = typeof params?.focus === "string" ? params.focus : null;
-  let selectedPool: { name: string; inviteCode: string } | null = null;
+  let selectedPool: { id: string; name: string; inviteCode: string } | null = null;
 
   if (poolInviteCode) {
     const membership = await prisma.poolMember.findFirst({
@@ -58,7 +58,7 @@ export default async function BolaoPage({ searchParams }: { searchParams?: Promi
         user: { email },
         pool: { inviteCode: poolInviteCode },
       },
-      select: { pool: { select: { name: true, inviteCode: true } } },
+      select: { pool: { select: { id: true, name: true, inviteCode: true } } },
     });
 
     if (!membership) redirect("/boloes");
@@ -71,7 +71,11 @@ export default async function BolaoPage({ searchParams }: { searchParams?: Promi
     ? await prisma.user.findUnique({ where: { email }, select: { id: true } })
     : null;
   const predictions = user ? await prisma.prediction.findMany({ where: { userId: user.id } }) : [];
+  const knockoutPredictions = user
+    ? await prisma.knockoutPrediction.findMany({ where: { poolScope: selectedPool?.id ?? "global", userId: user.id } })
+    : [];
   const predictionMap = new Map(predictions.map((prediction) => [prediction.matchId, prediction]));
+  const knockoutWinnerMap = Object.fromEntries(knockoutPredictions.map((prediction) => [prediction.bracketMatchId, prediction.winnerTeam]));
   const roundMap = getMatchRoundMap(matches);
 
   return (
@@ -139,9 +143,12 @@ export default async function BolaoPage({ searchParams }: { searchParams?: Promi
           canSave={canSave}
           enableKnockout
           focusMatchId={focusMatchId}
+          initialKnockoutWinners={knockoutWinnerMap}
+          knockoutPoolInviteCode={selectedPool?.inviteCode ?? null}
           knockoutVariant="cards"
           locale={locale}
           saveAction={savePrediction}
+          saveKnockoutAction={saveKnockoutPrediction}
           showStandings={false}
           matches={matches.map((match) => {
             const prediction = predictionMap.get(match.id);

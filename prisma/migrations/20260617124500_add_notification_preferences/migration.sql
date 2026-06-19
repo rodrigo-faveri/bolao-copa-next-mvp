@@ -1,0 +1,2 @@
+ALTER TABLE "User" ADD COLUMN "notifyPickDeadlines" BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE "User" ADD COLUMN "notificationLeadMinutes" INTEGER NOT NULL DEFAULT 60;

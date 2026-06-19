@@ -103,8 +103,8 @@ export default async function BoloesPage({ searchParams }: { searchParams?: Prom
                     <h3>{membership.pool.name}</h3>
                     <p className="poolRulesSummary">
                       <span>{poolMode}</span>
-                      <span>{formatMessage(copy.pools.exactRule, { points: membership.pool.exactScorePoints })}</span>
-                      <span>{formatMessage(copy.pools.outcomeRule, { points: membership.pool.outcomePoints })}</span>
+                      <span>{formatMessage(copy.pools.groupStageRule, { exact: membership.pool.groupStageExactScorePoints, outcome: membership.pool.groupStageOutcomePoints })}</span>
+                      <span>{formatMessage(copy.pools.knockoutRule, { exact: membership.pool.knockoutExactScorePoints, outcome: membership.pool.knockoutOutcomePoints })}</span>
                     </p>
                     <p className="muted">{formatMessage(copy.pools.participantsCount, { count: membership.pool._count.members })} · {formatMessage(copy.pools.createdBy, { owner: ownerName })}</p>
                   </div>

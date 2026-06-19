@@ -18,6 +18,17 @@ const PredictionSchema = z.object({
   goalsB: z.coerce.number().int().min(0).max(MAX_GOALS),
 });
 
+const KnockoutPredictionSchema = z.object({
+  awayLabel: z.string().trim().min(1).max(40),
+  awayTeam: z.string().trim().max(80).optional(),
+  bracketMatchId: z.string().trim().min(2).max(60),
+  bracketRound: z.string().trim().min(1).max(40),
+  homeLabel: z.string().trim().min(1).max(40),
+  homeTeam: z.string().trim().max(80).optional(),
+  poolInviteCode: z.string().trim().max(24).optional(),
+  winnerTeam: z.string().trim().min(1).max(80),
+});
+
 export async function savePrediction(formData: FormData) {
   const session = await auth();
   const email = session?.user?.email;
@@ -63,5 +74,92 @@ export async function savePrediction(formData: FormData) {
   });
 
   revalidatePath("/bolao");
+  revalidatePath("/ranking");
+}
+
+export async function saveKnockoutPrediction(formData: FormData) {
+  const session = await auth();
+  const email = session?.user?.email;
+  if (!email) throw new Error("VocÃª precisa estar logado.");
+
+  await assertRateLimit(`knockout-prediction:${email}`, predictionRateLimitMaxAttempts, predictionRateLimitWindowMs);
+
+  const result = KnockoutPredictionSchema.safeParse({
+    awayLabel: formData.get("awayLabel"),
+    awayTeam: formData.get("awayTeam") || undefined,
+    bracketMatchId: formData.get("bracketMatchId"),
+    bracketRound: formData.get("bracketRound"),
+    homeLabel: formData.get("homeLabel"),
+    homeTeam: formData.get("homeTeam") || undefined,
+    poolInviteCode: formData.get("poolInviteCode") || undefined,
+    winnerTeam: formData.get("winnerTeam"),
+  });
+  if (!result.success) throw new Error("Palpite do mata-mata invÃ¡lido.");
+
+  const { poolInviteCode, winnerTeam, ...prediction } = result.data;
+  const options = [prediction.homeTeam, prediction.awayTeam].filter(Boolean);
+  if (options.length > 0 && !options.includes(winnerTeam)) {
+    throw new Error("O vencedor precisa ser uma das seleÃ§Ãµes do confronto.");
+  }
+
+  await prisma.$transaction(async (transaction) => {
+    const user = await transaction.user.findUnique({ where: { email }, select: { id: true } });
+    if (!user) throw new Error("UsuÃ¡rio nÃ£o encontrado.");
+
+    let poolId: string | null = null;
+    let poolScope = "global";
+    const normalizedInviteCode = poolInviteCode?.toUpperCase();
+
+    if (normalizedInviteCode) {
+      const membership = await transaction.poolMember.findFirst({
+        where: {
+          pool: { inviteCode: normalizedInviteCode },
+          userId: user.id,
+        },
+        select: { pool: { select: { id: true } } },
+      });
+      if (!membership) throw new Error("VocÃª nÃ£o participa deste bolÃ£o.");
+      poolId = membership.pool.id;
+      poolScope = membership.pool.id;
+    }
+
+    await transaction.knockoutPrediction.upsert({
+      where: {
+        userId_poolScope_bracketMatchId: {
+          bracketMatchId: prediction.bracketMatchId,
+          poolScope,
+          userId: user.id,
+        },
+      },
+      update: {
+        ...prediction,
+        poolId,
+        winnerTeam,
+      },
+      create: {
+        ...prediction,
+        poolId,
+        poolScope,
+        userId: user.id,
+        winnerTeam,
+      },
+    });
+
+    await createAuditLog(transaction, {
+      actorId: user.id,
+      actorEmail: email,
+      action: "knockout_prediction_saved",
+      entity: "knockout_prediction",
+      entityId: prediction.bracketMatchId,
+      metadata: {
+        bracketRound: prediction.bracketRound,
+        poolScope,
+        winnerTeam,
+      },
+    });
+  });
+
+  revalidatePath("/bolao");
+  revalidatePath("/simulador");
   revalidatePath("/ranking");
 }
