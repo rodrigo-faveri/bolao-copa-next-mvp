@@ -24,6 +24,7 @@ type SimulatorMatch = {
 };
 
 type Score = { goalsA: string; goalsB: string };
+type ScoreDrafts = Record<string, Score>;
 type StageView = "groups" | "knockout";
 type KnockoutVariant = "bracket" | "cards";
 
@@ -108,6 +109,7 @@ const roundOf32Template = [
   ["1B", "3Âº"],
   ["1K", "3Âº"],
 ] as const;
+const scoreDraftsStorageKey = "bolao_score_drafts_v1";
 
 function flagFor(team: string) {
   const flagUrl = getTeamFlagUrl(team);
@@ -169,6 +171,53 @@ function makeInitialScores(matches: SimulatorMatch[]) {
   );
 }
 
+function isValidGoalDraft(value: unknown) {
+  if (value === "") return true;
+  if (typeof value !== "string") return false;
+  if (!/^\d+$/.test(value)) return false;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= MAX_GOALS;
+}
+
+function isValidScoreDraft(value: unknown): value is Score {
+  if (typeof value !== "object" || value === null) return false;
+  const score = value as Partial<Score>;
+  return isValidGoalDraft(score.goalsA) && isValidGoalDraft(score.goalsB);
+}
+
+function readScoreDrafts(): ScoreDrafts {
+  try {
+    const raw = window.localStorage.getItem(scoreDraftsStorageKey);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return {};
+
+    return Object.fromEntries(
+      Object.entries(parsed).filter((entry): entry is [string, Score] => isValidScoreDraft(entry[1])),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function writeScoreDrafts(drafts: ScoreDrafts) {
+  const entries = Object.entries(drafts);
+  if (entries.length === 0) {
+    window.localStorage.removeItem(scoreDraftsStorageKey);
+    return;
+  }
+
+  window.localStorage.setItem(scoreDraftsStorageKey, JSON.stringify(Object.fromEntries(entries)));
+}
+
+function canUseScoreDraft(match: SimulatorMatch, currentScore: Score) {
+  return match.isOpen
+    && match.resultGoalsA === null
+    && match.resultGoalsB === null
+    && currentScore.goalsA === ""
+    && currentScore.goalsB === "";
+}
+
 function emptyStanding(team: string): Standing {
   return {
     team,
@@ -190,11 +239,14 @@ function calculateStandings(matches: SimulatorMatch[], scores: Record<string, Sc
     standings.set(match.teamA, standings.get(match.teamA) ?? emptyStanding(match.teamA));
     standings.set(match.teamB, standings.get(match.teamB) ?? emptyStanding(match.teamB));
 
+    const officialGoalsA = match.resultGoalsA;
+    const officialGoalsB = match.resultGoalsB;
+    const hasOfficialResult = officialGoalsA !== null && officialGoalsB !== null;
     const score = scores[match.id];
-    if (!score || score.goalsA === "" || score.goalsB === "") continue;
+    if (!hasOfficialResult && (!score || score.goalsA === "" || score.goalsB === "")) continue;
 
-    const goalsA = Number(score.goalsA);
-    const goalsB = Number(score.goalsB);
+    const goalsA = hasOfficialResult ? officialGoalsA : Number(score.goalsA);
+    const goalsB = hasOfficialResult ? officialGoalsB : Number(score.goalsB);
     if (!Number.isInteger(goalsA) || !Number.isInteger(goalsB)) continue;
 
     const teamA = standings.get(match.teamA)!;
@@ -234,6 +286,7 @@ function calculateStandings(matches: SimulatorMatch[], scores: Record<string, Sc
 }
 
 function hasCompleteScores(match: SimulatorMatch, scores: Record<string, Score>) {
+  if (match.resultGoalsA !== null && match.resultGoalsB !== null) return true;
   const score = scores[match.id];
   if (!score || score.goalsA === "" || score.goalsB === "") return false;
   return Number.isInteger(Number(score.goalsA)) && Number.isInteger(Number(score.goalsB));
@@ -359,6 +412,7 @@ export function WorldCupSimulator({
 }) {
   const copy = t(locale);
   const [scores, setScores] = useState(() => makeInitialScores(matches));
+  const [draftMatchIds, setDraftMatchIds] = useState<Set<string>>(() => new Set());
   const [roundByGroup, setRoundByGroup] = useState<Record<string, number>>({});
   const [knockoutWinners, setKnockoutWinners] = useState<Record<string, string>>(() => initialKnockoutWinners);
   const [knockoutRoundIndex, setKnockoutRoundIndex] = useState(0);
@@ -369,6 +423,7 @@ export function WorldCupSimulator({
   const [saveFeedbackByMatch, setSaveFeedbackByMatch] = useState<Record<string, SaveFeedback>>({});
   const saveFeedbackTimers = useRef<Record<string, number>>({});
   const lastFocusedMatch = useRef<string | null>(null);
+  const matchById = useMemo(() => new Map(matches.map((match) => [match.id, match])), [matches]);
   useEffect(() => {
     const timers = saveFeedbackTimers.current;
     setIsHydrated(true);
@@ -381,6 +436,31 @@ export function WorldCupSimulator({
   useEffect(() => {
     setKnockoutWinners(initialKnockoutWinners);
   }, [initialKnockoutWinners]);
+  useEffect(() => {
+    if (!canSave || !saveAction) return;
+
+    const drafts = readScoreDrafts();
+    const restoredDraftIds = new Set<string>();
+
+    setScores((current) => {
+      let hasChanges = false;
+      const next = { ...current };
+
+      for (const match of matches) {
+        const draft = drafts[match.id];
+        const currentScore = next[match.id] ?? { goalsA: "", goalsB: "" };
+        if (!draft || !canUseScoreDraft(match, currentScore)) continue;
+
+        next[match.id] = draft;
+        restoredDraftIds.add(match.id);
+        hasChanges = true;
+      }
+
+      return hasChanges ? next : current;
+    });
+
+    setDraftMatchIds(restoredDraftIds);
+  }, [canSave, matches, saveAction]);
   const groups = useMemo<SimulatorGroup[]>(() => {
     const byGroup = new Map<string, SimulatorMatch[]>();
     for (const match of matches) {
@@ -561,11 +641,55 @@ export function WorldCupSimulator({
   }
 
   function applyAiPick(matchId: string, goalsA: number, goalsB: number) {
+    const nextScore = { goalsA: String(goalsA), goalsB: String(goalsB) };
     setScores((current) => ({
       ...current,
-      [matchId]: { goalsA: String(goalsA), goalsB: String(goalsB) },
+      [matchId]: nextScore,
     }));
+    persistScoreDraft(matchId, nextScore);
     clearSaveFeedback(matchId);
+  }
+
+  function persistScoreDraft(matchId: string, nextScore: Score) {
+    if (!canSave || !saveAction) return;
+    const match = matchById.get(matchId);
+    if (!match || !match.isOpen || match.resultGoalsA !== null || match.resultGoalsB !== null) return;
+
+    const drafts = readScoreDrafts();
+    if (nextScore.goalsA === "" && nextScore.goalsB === "") {
+      delete drafts[matchId];
+      setDraftMatchIds((current) => {
+        if (!current.has(matchId)) return current;
+        const next = new Set(current);
+        next.delete(matchId);
+        return next;
+      });
+    } else {
+      drafts[matchId] = nextScore;
+      setDraftMatchIds((current) => new Set(current).add(matchId));
+    }
+    writeScoreDrafts(drafts);
+  }
+
+  function clearScoreDraft(matchId: string) {
+    const drafts = readScoreDrafts();
+    delete drafts[matchId];
+    writeScoreDrafts(drafts);
+    setDraftMatchIds((current) => {
+      if (!current.has(matchId)) return current;
+      const next = new Set(current);
+      next.delete(matchId);
+      return next;
+    });
+  }
+
+  function discardScoreDraft(matchId: string) {
+    clearScoreDraft(matchId);
+    clearSaveFeedback(matchId);
+    setScores((current) => ({
+      ...current,
+      [matchId]: { goalsA: "", goalsB: "" },
+    }));
   }
 
   function clearSaveFeedback(matchId: string) {
@@ -602,6 +726,7 @@ export function WorldCupSimulator({
 
   function handleScoreChange(matchId: string, nextScore: Score) {
     clearSaveFeedback(matchId);
+    persistScoreDraft(matchId, nextScore);
     setScores((current) => ({ ...current, [matchId]: nextScore }));
   }
 
@@ -613,6 +738,7 @@ export function WorldCupSimulator({
 
     try {
       await saveAction(formData);
+      clearScoreDraft(matchId);
       showTemporarySaveFeedback(matchId, { status: "saved", message: copy.simulator.saved });
     } catch (error) {
       showTemporarySaveFeedback(matchId, {
@@ -837,6 +963,12 @@ export function WorldCupSimulator({
                             {aiState.status === "loading" ? "..." : copy.simulator.ai}
                           </button>
                         </div>
+                        {draftMatchIds.has(match.id) && !hasOfficialResult && saveFeedback.status !== "saved" && (
+                          <div className="matchDraftHint" role="status">
+                            <span>{copy.simulator.localDraft}</span>
+                            <button onClick={() => discardScoreDraft(match.id)} type="button">{copy.simulator.clearLocalDraft}</button>
+                          </div>
+                        )}
                         {saveFeedback.status === "saved" && <div className="matchSaveFeedback matchSaveSuccess" role="status">{saveFeedback.message}</div>}
                         {saveFeedback.status === "error" && <div className="matchSaveFeedback matchSaveError" role="alert">{saveFeedback.message}</div>}
                         {hasOfficialResult && (

@@ -412,6 +412,21 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .adminSyncHeader p { max-width: 720px; margin-bottom: 0; color: #617068; font-weight: 800; }
 .adminSyncAction { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
 .adminSyncAction span { color: #617068; font-size: .84rem; font-weight: 800; }
+.adminSyncAction button:disabled { opacity: .72; }
+.adminSyncToast { position: fixed; right: 22px; bottom: 22px; z-index: 95; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: start; width: min(92vw, 420px); padding: 16px; border: 1px solid #dce5df; border-radius: 18px; background: white; box-shadow: 0 22px 54px rgb(20 32 25 / 24%); }
+.adminSyncToast strong { display: block; margin-bottom: 4px; color: #142019; font-size: 1rem; }
+.adminSyncToast p { margin: 0; color: #4f5d55; font-size: .92rem; line-height: 1.4; }
+.adminSyncToast button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border-radius: 999px; background: #e7eee9; color: #142019; }
+.adminSyncToastRunning { border-color: #f1cf5a; background: linear-gradient(135deg, #ffffff 0%, #fff8df 100%); }
+.adminSyncToastRunning::before { position: absolute; top: -2px; left: 18px; right: 18px; height: 3px; border-radius: 999px; background: linear-gradient(90deg, #ffd75b, #116530, #ffd75b); background-size: 220% 100%; content: ""; animation: syncToastProgress 1.2s linear infinite; }
+.adminSyncToastSuccess { border-color: #bbf7d0; background: linear-gradient(135deg, #ffffff 0%, #ecfdf3 100%); }
+.adminSyncToastSuccess strong { color: #116530; }
+.adminSyncToastError { border-color: #fecaca; background: linear-gradient(135deg, #ffffff 0%, #fff1f2 100%); }
+.adminSyncToastError strong { color: #9a3412; }
+@keyframes syncToastProgress {
+  from { background-position: 0% 0; }
+  to { background-position: 220% 0; }
+}
 .adminSyncStatus { display: grid; gap: 4px; min-width: 180px; padding: 12px; border: 1px solid #dce5df; border-radius: 14px; background: #f8fbf9; text-align: right; }
 .adminSyncStatus span, .adminSyncStatus time { color: #617068; font-size: .82rem; font-weight: 800; }
 .adminSyncStatus strong { color: #116530; font-size: 1.05rem; }
@@ -481,6 +496,8 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .matchSaveFeedback { grid-column: 1 / -1; padding: 9px 12px; border-radius: 12px; font-size: .88rem; font-weight: 900; }
 .matchSaveSuccess { border: 1px solid #bbf7d0; background: #ecfdf3; color: #116530; }
 .matchSaveError { border: 1px solid #fecaca; background: #fff1f2; color: #9a3412; }
+.matchDraftHint { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-self: start; padding: 7px 11px; border: 1px dashed #c9b05c; border-radius: 999px; background: #fffaf0; color: #7a4d00; font-size: .82rem; font-weight: 900; }
+.matchDraftHint button { padding: 0; border-radius: 0; background: transparent; color: #116530; font-size: .82rem; font-weight: 1000; text-decoration: underline; text-underline-offset: 3px; }
 .aiHelpButton { min-width: 42px; padding: 10px 11px; border: 1px solid #f1cf5a; background: #fff7d6; color: #7a4d00; }
 .aiHelpButton:hover:not(:disabled) { background: #ffd75b; color: #123421; }
 .matchResultSummary { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: #617068; font-size: .84rem; }

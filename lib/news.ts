@@ -13,18 +13,22 @@ type NewsFeed = {
 
 const googleNewsBase = "https://news.google.com/rss/search";
 
+function buildGoogleNewsUrl(query: string) {
+  return `${googleNewsBase}?q=${encodeURIComponent(query)}&hl=pt-BR&gl=BR&ceid=BR:pt-419`;
+}
+
 const newsFeeds: NewsFeed[] = [
   {
     name: "ge",
-    url: `${googleNewsBase}?q=${encodeURIComponent("Copa do Mundo 2026 site:ge.globo.com")}&hl=pt-BR&gl=BR&ceid=BR:pt-419`,
+    url: buildGoogleNewsUrl("Copa do Mundo 2026 site:ge.globo.com"),
   },
   {
     name: "ESPN",
-    url: `${googleNewsBase}?q=${encodeURIComponent("Copa do Mundo 2026 site:espn.com.br")}&hl=pt-BR&gl=BR&ceid=BR:pt-419`,
+    url: buildGoogleNewsUrl("Copa do Mundo 2026 site:espn.com.br"),
   },
   {
     name: "FIFA",
-    url: `${googleNewsBase}?q=${encodeURIComponent("Copa do Mundo 2026 site:fifa.com")}&hl=pt-BR&gl=BR&ceid=BR:pt-419`,
+    url: buildGoogleNewsUrl("Copa do Mundo 2026 site:fifa.com"),
   },
 ];
 
@@ -83,6 +87,33 @@ export async function getLatestNews(limit = 12) {
 
   return results
     .flatMap((result) => (result.status === "fulfilled" ? result.value : []))
+    .sort((a, b) => {
+      const timeA = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+      const timeB = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+      return timeB - timeA;
+    })
+    .slice(0, limit);
+}
+
+export async function getTeamNews(teamNames: string[], limit = 10) {
+  const uniqueTeamNames = Array.from(new Set(teamNames.map((team) => team.trim()).filter(Boolean))).slice(0, 4);
+  if (uniqueTeamNames.length === 0) return [];
+
+  const results = await Promise.allSettled(
+    uniqueTeamNames.map(async (team) => {
+      const query = `"${team}" "Copa do Mundo 2026" OR "${team}" seleção futebol`;
+      const response = await fetch(buildGoogleNewsUrl(query), { next: { revalidate: 10 * 60 } });
+      if (!response.ok) throw new Error(`Team news ${team} returned ${response.status}`);
+      return parseRss(await response.text(), `Selecao: ${team}`);
+    }),
+  );
+
+  const byLink = new Map<string, NewsItem>();
+  for (const item of results.flatMap((result) => (result.status === "fulfilled" ? result.value : []))) {
+    if (!byLink.has(item.link)) byLink.set(item.link, item);
+  }
+
+  return Array.from(byLink.values())
     .sort((a, b) => {
       const timeA = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
       const timeB = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
