@@ -41,6 +41,15 @@ const MatchLiveUrlSchema = z.object({
 const adminActionRateLimitWindowMs = 60 * 1000;
 const adminSyncRateLimitWindowMs = 5 * 60 * 1000;
 
+export type AdminSyncFeedbackState = {
+  candidates?: number;
+  imported?: number;
+  message?: string;
+  skipped?: number;
+  status: "idle" | "success" | "error";
+  submittedAt?: number;
+};
+
 async function assertAdminAction(adminEmail: string | null, action: string) {
   await assertRateLimit(`admin:any:${adminEmail ?? "anonymous"}`, 20, adminActionRateLimitWindowMs);
 
@@ -103,7 +112,7 @@ export async function saveMatchResult(formData: FormData) {
   revalidatePath(`/tempo-real/${result.data.matchId}`);
 }
 
-export async function syncPendingResultsNow() {
+async function runAdminResultSync() {
   const session = await auth();
   const adminEmail = session?.user?.email ?? null;
   await assertAdminAction(adminEmail, "admin_serpapi_sync");
@@ -137,6 +146,42 @@ export async function syncPendingResultsNow() {
   revalidatePath("/bolao");
   revalidatePath("/simulador");
   revalidatePath("/resultados");
+
+  return summary;
+}
+
+export async function syncPendingResultsNow() {
+  await runAdminResultSync();
+}
+
+export async function syncPendingResultsWithFeedback(
+  _previousState: AdminSyncFeedbackState,
+  _formData: FormData,
+): Promise<AdminSyncFeedbackState> {
+  void _previousState;
+  void _formData;
+
+  try {
+    const summary = await runAdminResultSync();
+    return {
+      candidates: summary.candidates,
+      imported: summary.imported,
+      message: "Sincronizacao concluida.",
+      skipped: summary.skipped,
+      status: "success",
+      submittedAt: Date.now(),
+    };
+  } catch (error) {
+    logger.error("admin_serpapi_sync_feedback_failed", {
+      message: error instanceof Error ? error.message : "unknown",
+    });
+    revalidatePath("/admin");
+    return {
+      message: error instanceof Error ? error.message : "Nao foi possivel sincronizar resultados agora.",
+      status: "error",
+      submittedAt: Date.now(),
+    };
+  }
 }
 
 export async function saveMatchStatus(formData: FormData) {

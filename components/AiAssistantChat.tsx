@@ -14,6 +14,7 @@ type AssistantMessage = {
 
 type AssistantAction =
   | { href: string; label: string; type?: "link" }
+  | { href: string; label: string; matchId: string; type: "focus_match" }
   | { goalsA: number; goalsB: number; href: string; label: string; matchId: string; type: "apply_pick" };
 
 const quickQuestions = [
@@ -89,6 +90,18 @@ export function AiAssistantChat({ locale = "pt-BR", variant = "page" }: { locale
     }, 120);
   }
 
+  function focusSuggestedMatch(action: Extract<AssistantAction, { type: "focus_match" }>) {
+    window.dispatchEvent(new CustomEvent("bolao:focus-match", {
+      detail: { matchId: action.matchId },
+    }));
+
+    window.setTimeout(() => {
+      if (!document.getElementById(`match-${action.matchId}`)) {
+        window.location.href = action.href;
+      }
+    }, 120);
+  }
+
   const chat = (
     <section className={`assistantShell ${variant === "page" ? "card" : "assistantWidgetPanel"}`}>
       <div className="assistantIntro">
@@ -130,6 +143,15 @@ export function AiAssistantChat({ locale = "pt-BR", variant = "page" }: { locale
                       className="buttonSecondary"
                       key={`${action.matchId}-${action.goalsA}-${action.goalsB}`}
                       onClick={() => applySuggestedPick(action)}
+                      type="button"
+                    >
+                      {action.label}
+                    </button>
+                  ) : action.type === "focus_match" ? (
+                    <button
+                      className="buttonSecondary"
+                      key={`${action.matchId}-${action.href}`}
+                      onClick={() => focusSuggestedMatch(action)}
                       type="button"
                     >
                       {action.label}

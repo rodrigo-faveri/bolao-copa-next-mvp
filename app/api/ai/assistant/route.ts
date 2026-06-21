@@ -5,9 +5,10 @@ import { z } from "zod";
 import { auth } from "../../../../auth";
 import { getKnowledgeQueryTerms, indexMatchKnowledge, indexNewsKnowledge, retrieveKnowledge, scoreKnowledgeText } from "../../../../lib/knowledge";
 import { logger } from "../../../../lib/logger";
-import { getLatestNews } from "../../../../lib/news";
+import { getLatestNews, getTeamNews } from "../../../../lib/news";
 import { prisma } from "../../../../lib/prisma";
 import { assertRateLimit } from "../../../../lib/rate-limit";
+import { PREDICTION_CLOSE_MINUTES } from "../../../../lib/prediction";
 import { getTeamDisplayName } from "../../../../lib/teams";
 
 export const runtime = "nodejs";
@@ -26,6 +27,12 @@ type AssistantAction =
     href: string;
     label: string;
     type: "link";
+  }
+  | {
+    href: string;
+    label: string;
+    matchId: string;
+    type: "focus_match";
   }
   | {
     goalsA: number;
@@ -87,6 +94,111 @@ function buildSuggestedPick(match: { group: string; id: string; teamA: string; t
   };
 }
 
+function buildFocusMatchAction(match: { id: string; teamA: string; teamB: string }): AssistantAction {
+  return {
+    href: `/bolao?focus=${encodeURIComponent(match.id)}#bolao-confrontos`,
+    label: `Abrir ${getTeamDisplayName(match.teamA)} x ${getTeamDisplayName(match.teamB)}`,
+    matchId: match.id,
+    type: "focus_match",
+  };
+}
+
+type ScenarioMatch = {
+  group: string;
+  id: string;
+  resultGoalsA: number | null;
+  resultGoalsB: number | null;
+  startsAt: Date | null;
+  teamA: string;
+  teamB: string;
+};
+
+type ScenarioPrediction = {
+  goalsA: number;
+  goalsB: number;
+  matchId: string;
+};
+
+function getScenarioScore(match: ScenarioMatch, predictionsByMatchId: Map<string, ScenarioPrediction>) {
+  if (match.resultGoalsA !== null && match.resultGoalsB !== null) {
+    return { goalsA: match.resultGoalsA, goalsB: match.resultGoalsB, source: "oficial" };
+  }
+
+  const prediction = predictionsByMatchId.get(match.id);
+  if (prediction) return { goalsA: prediction.goalsA, goalsB: prediction.goalsB, source: "seu palpite" };
+  return null;
+}
+
+function buildScenarioStandings(matches: ScenarioMatch[], predictions: ScenarioPrediction[]) {
+  const predictionsByMatchId = new Map(predictions.map((prediction) => [prediction.matchId, prediction]));
+  const rows = new Map<string, { goalDifference: number; goalsFor: number; played: number; points: number; team: string }>();
+  const pending: ScenarioMatch[] = [];
+
+  for (const match of matches) {
+    rows.set(match.teamA, rows.get(match.teamA) ?? { goalDifference: 0, goalsFor: 0, played: 0, points: 0, team: match.teamA });
+    rows.set(match.teamB, rows.get(match.teamB) ?? { goalDifference: 0, goalsFor: 0, played: 0, points: 0, team: match.teamB });
+
+    const score = getScenarioScore(match, predictionsByMatchId);
+    if (!score) {
+      pending.push(match);
+      continue;
+    }
+
+    const teamA = rows.get(match.teamA)!;
+    const teamB = rows.get(match.teamB)!;
+    teamA.played += 1;
+    teamB.played += 1;
+    teamA.goalsFor += score.goalsA;
+    teamB.goalsFor += score.goalsB;
+    teamA.goalDifference += score.goalsA - score.goalsB;
+    teamB.goalDifference += score.goalsB - score.goalsA;
+
+    if (score.goalsA > score.goalsB) teamA.points += 3;
+    else if (score.goalsA < score.goalsB) teamB.points += 3;
+    else {
+      teamA.points += 1;
+      teamB.points += 1;
+    }
+  }
+
+  return {
+    pending,
+    standings: Array.from(rows.values()).sort((a, b) =>
+      b.points - a.points
+      || b.goalDifference - a.goalDifference
+      || b.goalsFor - a.goalsFor
+      || getTeamDisplayName(a.team).localeCompare(getTeamDisplayName(b.team)),
+    ),
+  };
+}
+
+function buildTeamSearchText(team: string) {
+  return [
+    team,
+    getTeamDisplayName(team),
+    getTeamDisplayName(team, "en-US"),
+    getTeamDisplayName(team, "es-ES"),
+  ].join(" ");
+}
+
+function detectMentionedTeams(question: string, matches: ScenarioMatch[], limit = 4) {
+  const terms = getKnowledgeQueryTerms(question);
+  if (terms.length === 0) return [];
+
+  const teamScores = new Map<string, number>();
+  for (const match of matches) {
+    for (const team of [match.teamA, match.teamB]) {
+      const score = scoreKnowledgeText(buildTeamSearchText(team), terms);
+      if (score > 0) teamScores.set(team, Math.max(teamScores.get(team) ?? 0, score));
+    }
+  }
+
+  return Array.from(teamScores.entries())
+    .sort((a, b) => b[1] - a[1] || getTeamDisplayName(a[0]).localeCompare(getTeamDisplayName(b[0])))
+    .map(([team]) => getTeamDisplayName(team))
+    .slice(0, limit);
+}
+
 async function buildAssistantContext(email: string, question: string, tools: string[]) {
   const terms = getKnowledgeQueryTerms(question);
   const uses = (tool: string) => tools.includes(tool) || tools.includes("all");
@@ -97,7 +209,7 @@ async function buildAssistantContext(email: string, question: string, tools: str
   });
   if (!user) throw new Error("Usuario nao encontrado.");
 
-  const [pendingMatches, finishedMatches, predictions, knockoutPredictions, users, news] = await Promise.all([
+  const [pendingMatches, finishedMatches, allMatches, predictions, knockoutPredictions, users] = await Promise.all([
     prisma.match.findMany({
       orderBy: [{ startsAt: "asc" }, { group: "asc" }],
       take: 18,
@@ -114,6 +226,10 @@ async function buildAssistantContext(email: string, question: string, tools: str
         resultGoalsA: { not: null },
         resultGoalsB: { not: null },
       },
+    }),
+    prisma.match.findMany({
+      orderBy: [{ group: "asc" }, { startsAt: "asc" }],
+      take: 160,
     }),
     prisma.prediction.findMany({
       include: { match: true },
@@ -134,10 +250,18 @@ async function buildAssistantContext(email: string, question: string, tools: str
       },
       take: 80,
     }),
-    getLatestNews(18).catch(() => []),
   ]);
+  const mentionedTeamNames = detectMentionedTeams(question, allMatches);
+  const shouldFetchNews = uses("relevant_news") || mentionedTeamNames.length > 0;
+  const [news, teamNews] = shouldFetchNews
+    ? await Promise.all([
+      getLatestNews(18).catch(() => []),
+      getTeamNews(mentionedTeamNames, 12).catch(() => []),
+    ])
+    : [[], []];
+  const combinedNews = [...teamNews, ...news];
   await Promise.all([
-    indexNewsKnowledge(prisma, news),
+    indexNewsKnowledge(prisma, combinedNews),
     indexMatchKnowledge(prisma),
   ]).catch((error) => {
     logger.warn("knowledge_index_failed", { message: error instanceof Error ? error.message : "unknown" });
@@ -145,9 +269,14 @@ async function buildAssistantContext(email: string, question: string, tools: str
   const retrievedKnowledge = await retrieveKnowledge(prisma, question, 8);
 
   const predictedMatchIds = new Set(predictions.map((prediction) => prediction.matchId));
+  const predictionScenarios = predictions.map((prediction) => ({
+    goalsA: prediction.goalsA,
+    goalsB: prediction.goalsB,
+    matchId: prediction.matchId,
+  }));
   const missingPicks = pendingMatches.filter((match) => !predictedMatchIds.has(match.id)).slice(0, 8);
   const suggestedPickMatch = missingPicks[0] ?? pendingMatches[0] ?? null;
-  const relevantNews = [...news]
+  const relevantNews = [...combinedNews]
     .map((item) => ({
       item,
       score: scoreKnowledgeText(`${item.title} ${item.description} ${item.source}`, terms),
@@ -158,12 +287,27 @@ async function buildAssistantContext(email: string, question: string, tools: str
   const relevantMatches = [...pendingMatches, ...finishedMatches]
     .map((match) => ({
       match,
-      score: scoreKnowledgeText(`${match.teamA} ${match.teamB} ${match.group}`, terms),
+      score: scoreKnowledgeText([
+        match.teamA,
+        match.teamB,
+        getTeamDisplayName(match.teamA),
+        getTeamDisplayName(match.teamB),
+        getTeamDisplayName(match.teamA, "en-US"),
+        getTeamDisplayName(match.teamB, "en-US"),
+        getTeamDisplayName(match.teamA, "es-ES"),
+        getTeamDisplayName(match.teamB, "es-ES"),
+        match.group,
+      ].join(" "), terms),
     }))
     .filter((item) => item.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, 8)
     .map(({ match }) => match);
+  const scenarioGroup = relevantMatches[0]?.group
+    ?? allMatches.find((match) => scoreKnowledgeText(`${match.group} grupo ${match.group}`, terms) > 0)?.group
+    ?? null;
+  const scenarioMatches = scenarioGroup ? allMatches.filter((match) => match.group === scenarioGroup) : [];
+  const scenario = scenarioMatches.length > 0 ? buildScenarioStandings(scenarioMatches, predictionScenarios) : null;
 
   const ranking = users
     .map((rankingUser) => {
@@ -201,6 +345,7 @@ async function buildAssistantContext(email: string, question: string, tools: str
       ...(relevantNews.length > 0
         ? relevantNews.map((item) => `- [${item.source}] ${item.title}`)
         : ["- Nenhuma noticia relevante carregada agora."]),
+      ...(mentionedTeamNames.length > 0 ? [`Selecoes pesquisadas especificamente: ${mentionedTeamNames.join(", ")}.`] : []),
     ] : []),
     ...(uses("knowledge_base") ? [
       "Trechos recuperados da base de conhecimento:",
@@ -214,6 +359,27 @@ async function buildAssistantContext(email: string, question: string, tools: str
         ? relevantMatches.map((match) => `- ${getTeamDisplayName(match.teamA)} x ${getTeamDisplayName(match.teamB)} | grupo ${match.group} | ${match.resultGoalsA ?? "?"} x ${match.resultGoalsB ?? "?"}`)
         : ["- Nenhuma partida especifica detectada."]),
     ] : []),
+    ...(uses("classification_scenarios") ? [
+      "Cenario de classificacao:",
+      ...(scenario
+        ? [
+          `- Grupo/fase analisado: ${scenarioGroup}. Resultados oficiais prevalecem; palpites do usuario entram apenas onde nao ha resultado oficial.`,
+          ...scenario.standings.map((row, index) => `- ${index + 1}. ${getTeamDisplayName(row.team)}: ${row.points} pts, SG ${row.goalDifference}, GP ${row.goalsFor}, J ${row.played}`),
+          ...(scenario.pending.length > 0
+            ? ["Jogos ainda sem resultado/palpite no cenario:", ...scenario.pending.map((match) => `- ${getTeamDisplayName(match.teamA)} x ${getTeamDisplayName(match.teamB)} | ${formatDate(match.startsAt)}`)]
+            : ["- Todos os jogos do cenario possuem resultado oficial ou palpite preenchido."]),
+        ]
+        : ["- Nao identifiquei um grupo ou confronto suficiente para montar cenario."]),
+    ] : []),
+    ...(uses("custom_alerts") ? [
+      "Plano de alerta personalizado:",
+      ...(missingPicks.length > 0
+        ? missingPicks.slice(0, 4).map((match) => {
+          const deadline = match.startsAt ? new Date(match.startsAt.getTime() - PREDICTION_CLOSE_MINUTES * 60 * 1000) : null;
+          return `- ${getTeamDisplayName(match.teamA)} x ${getTeamDisplayName(match.teamB)} | fechamento do palpite: ${formatDate(deadline)} | acao sugerida: configurar lembrete no perfil e abrir confronto.`;
+        })
+        : ["- Nao encontrei palpites pendentes nos proximos jogos carregados."]),
+    ] : []),
   ];
 
   const sources: AssistantSource[] = [
@@ -224,6 +390,9 @@ async function buildAssistantContext(email: string, question: string, tools: str
 
   return {
     context: contextLines.join("\n").slice(0, 9000),
+    focusMatchAction: relevantMatches[0] ? buildFocusMatchAction(relevantMatches[0]) : null,
+    hasAlertPlan: uses("custom_alerts") && missingPicks.length > 0,
+    hasScenario: Boolean(scenario),
     sources,
     suggestedPickAction: suggestedPickMatch ? buildSuggestedPick(suggestedPickMatch) : null,
   };
@@ -244,6 +413,8 @@ function localAnswer(question: string, context: string) {
 
 function classifyIntent(question: string) {
   const normalizedQuestion = question.toLowerCase();
+  if (/(alerta|aviso|avisar|lembrete|notific)/i.test(normalizedQuestion)) return "custom_alerts";
+  if (/(classifica|classificacao|classifica[cç][aã]o|cenario|cen[aá]rio|avanca|avan[cç]a|passa|grupo)/i.test(normalizedQuestion)) return "classification_scenarios";
   if (/(pendente|preciso|falta|fech)/i.test(normalizedQuestion)) return "pending_picks";
   if (/(ranking|posicao|lider|pontos|pontu)/i.test(normalizedQuestion)) return "ranking";
   if (/(noticia|lesao|convoc|titular|fonte)/i.test(normalizedQuestion)) return "news";
@@ -252,11 +423,13 @@ function classifyIntent(question: string) {
 }
 
 function selectToolsForIntent(intent: string) {
+  if (intent === "custom_alerts") return ["custom_alerts", "pending_picks", "upcoming_matches", "relevant_matches", "knowledge_base"];
+  if (intent === "classification_scenarios") return ["classification_scenarios", "relevant_matches", "pending_picks", "upcoming_matches", "knowledge_base"];
   if (intent === "pending_picks") return ["pending_picks", "upcoming_matches", "knowledge_base"];
   if (intent === "ranking") return ["ranking_snapshot", "recent_results", "knowledge_base"];
   if (intent === "news") return ["relevant_news", "knowledge_base", "relevant_matches"];
   if (intent === "pick_strategy") return ["pending_picks", "upcoming_matches", "recent_results", "relevant_news", "knowledge_base"];
-  return ["pending_picks", "upcoming_matches", "ranking_snapshot", "knowledge_base"];
+  return ["pending_picks", "upcoming_matches", "ranking_snapshot", "relevant_news", "relevant_matches", "knowledge_base"];
 }
 
 function selectActionsForIntent(intent: string, tools: string[]) {
@@ -272,6 +445,12 @@ function selectActionsForIntent(intent: string, tools: string[]) {
   }
   if (tools.includes("recent_results")) {
     actions.push({ href: "/resultados", label: "Ver resultados", type: "link" });
+  }
+  if (tools.includes("custom_alerts")) {
+    actions.push({ href: "/perfil", label: "Configurar notificacoes", type: "link" });
+  }
+  if (tools.includes("classification_scenarios")) {
+    actions.push({ href: "/simulador", label: "Abrir simulador", type: "link" });
   }
   if (intent === "pick_strategy") {
     actions.push({ href: "/simulador", label: "Abrir simulador", type: "link" });
@@ -325,10 +504,15 @@ async function runAssistantGraph(email: string, question: string) {
       tools: selectToolsForIntent(classifyIntent(state.question)),
     }))
     .addNode("retrieve", async (state) => {
-      const { context, sources, suggestedPickAction } = await buildAssistantContext(state.email, state.question, state.tools);
+      const { context, focusMatchAction, hasAlertPlan, hasScenario, sources, suggestedPickAction } = await buildAssistantContext(state.email, state.question, state.tools);
       const shouldSuggestPick = state.intent === "pick_strategy" || state.intent === "pending_picks";
+      const shouldFocusMatch = state.tools.includes("relevant_matches") || state.intent === "general" || hasAlertPlan || hasScenario;
       return {
-        actions: mergeActions(shouldSuggestPick ? [suggestedPickAction] : [], state.actions),
+        actions: mergeActions(
+          shouldFocusMatch ? [focusMatchAction] : [],
+          shouldSuggestPick ? [suggestedPickAction] : [],
+          state.actions,
+        ),
         context,
         sources,
       };

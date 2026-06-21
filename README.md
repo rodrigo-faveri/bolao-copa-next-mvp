@@ -28,6 +28,7 @@ App recreativo para palpites da Copa do Mundo de 2026 entre amigos, sem dinheiro
 - Tempo real automatico por horario, com link externo opcional.
 - Cadastro manual opcional de lances pelo admin.
 - Alertas no bolao para palpites pendentes perto do fechamento.
+- Rascunho local dos placares digitados antes de salvar.
 - Resultado oficial exibido separadamente do palpite do usuario.
 - Pagina de resultados com jogos em acompanhamento, placar oficial, resumo automatico e motivo da pontuacao.
 - Pontuacao automatica: 5 pontos para placar exato e 3 para resultado correto.
@@ -49,6 +50,8 @@ App recreativo para palpites da Copa do Mundo de 2026 entre amigos, sem dinheiro
 - Contexto de bolao privado na pagina de palpites com atalhos para ranking/detalhes.
 - Assistente de IA por partida usando OpenRouter, com fallback local gratuito.
 - Assistente IA em widget flutuante, com LangGraph, OpenRouter e RAG hibrido usando base de conhecimento, partidas, palpites, resultados, ranking e noticias recentes como contexto.
+- Assistente IA com acoes agenticas para abrir/focar confrontos citados pelo usuario, preencher sugestoes de palpite sem salvar automaticamente, montar plano de alerta e explicar cenarios de classificacao.
+- Assistente IA busca noticias especificas das selecoes citadas, combinando noticias gerais da Copa com contexto direcionado por time.
 - Auditoria em banco para eventos sensiveis.
 - Headers de seguranca no Next.js.
 - Rate limit para salvar palpites e consultar IA.
@@ -427,4 +430,4 @@ npm run test:integration
 ## Proximas Evolucoes
 
 - Ativar embeddings reais na tabela `KnowledgeDocument` quando houver volume maior de documentos.
-- Adicionar ferramentas agenticas para executar acoes, como abrir jogo especifico, montar alerta ou salvar rascunho de palpite.
+- Transformar planos de alerta sugeridos pela IA em regras persistidas por usuario.

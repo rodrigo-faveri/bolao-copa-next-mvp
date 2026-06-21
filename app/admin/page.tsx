@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "../../auth";
+import { AdminSyncFeedbackForm } from "../../components/AdminSyncFeedbackForm";
 import { CupHeader } from "../../components/CupHeader";
 import { isAdminEmail } from "../../lib/access-control";
 import { getCurrentLocale } from "../../lib/i18n";
@@ -9,7 +10,7 @@ import { prisma } from "../../lib/prisma";
 import { readPositiveInt } from "../../lib/result-sync";
 import { getTeamDisplayName } from "../../lib/teams";
 import { getMatchVenue } from "../../lib/venues";
-import { saveMatchEvent, saveMatchLiveUrl, saveMatchResult, saveMatchStatus, syncPendingResultsNow } from "./actions";
+import { saveMatchEvent, saveMatchLiveUrl, saveMatchResult, saveMatchStatus, syncPendingResultsWithFeedback } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -268,10 +269,18 @@ export default async function AdminPage() {
             <span className="badge badgeGold">{copy.admin.syncBadge}</span>
             <h2>{copy.admin.syncTitle}</h2>
             <p>{copy.admin.syncDescription}</p>
-            <form action={syncPendingResultsNow} className="adminSyncAction">
-              <button type="submit">{copy.admin.syncNow}</button>
-              <span>{copy.admin.syncNowHint}</span>
-            </form>
+            <AdminSyncFeedbackForm
+              action={syncPendingResultsWithFeedback}
+              buttonLabel={copy.admin.syncNow}
+              closeLabel={copy.admin.syncToastClose}
+              errorTitle={copy.admin.syncToastErrorTitle}
+              hint={copy.admin.syncNowHint}
+              loadingLabel={copy.admin.syncToastLoadingButton}
+              runningText={copy.admin.syncToastRunningText}
+              runningTitle={copy.admin.syncToastRunningTitle}
+              successSummary={copy.admin.syncToastSuccessSummary}
+              successTitle={copy.admin.syncToastSuccessTitle}
+            />
           </div>
           {latestSyncRun ? (
             <div className={`adminSyncStatus adminSyncStatus${latestSyncRun.status === "failed" ? "Failed" : latestSyncRun.status === "running" ? "Running" : "Success"}`}>
