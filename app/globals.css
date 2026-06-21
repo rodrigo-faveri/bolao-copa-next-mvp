@@ -254,6 +254,10 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .assistantActions > span { color: #7a4d00; font-size: .72rem; font-weight: 900; text-transform: uppercase; }
 .assistantActions > div { display: flex; flex-wrap: wrap; gap: 8px; }
 .assistantActions .buttonLink, .assistantActions button { padding: 8px 10px; font-size: .86rem; }
+.assistantInlineAction { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.assistantInlineAction small { flex-basis: 100%; font-size: .78rem; font-weight: 900; }
+.assistantActionSuccess { color: #116530; }
+.assistantActionError { color: #9a3412; }
 .assistantForm { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: end; padding: 18px 24px 24px; border-top: 1px solid #e7eee9; background: #fbfdfb; }
 .assistantForm label { display: grid; gap: 8px; color: #617068; font-size: .82rem; font-weight: 900; text-transform: uppercase; }
 .assistantForm textarea { width: 100%; min-height: 96px; resize: vertical; padding: 12px; border: 1px solid #b9c8be; border-radius: 14px; font: inherit; text-align: left; }
