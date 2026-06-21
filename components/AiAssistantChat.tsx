@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AssistantAlertActionButton } from "./AssistantAlertActionButton";
 import type { AppLocale } from "../lib/i18n-shared";
 import { t } from "../lib/i18n-shared";
 
@@ -14,6 +15,7 @@ type AssistantMessage = {
 
 type AssistantAction =
   | { href: string; label: string; type?: "link" }
+  | { label: string; leadMinutes: number; matchId: string; type: "create_alert" }
   | { href: string; label: string; matchId: string; type: "focus_match" }
   | { goalsA: number; goalsB: number; href: string; label: string; matchId: string; type: "apply_pick" };
 
@@ -147,6 +149,13 @@ export function AiAssistantChat({ locale = "pt-BR", variant = "page" }: { locale
                     >
                       {action.label}
                     </button>
+                  ) : action.type === "create_alert" ? (
+                    <AssistantAlertActionButton
+                      key={`${action.matchId}-${action.leadMinutes}`}
+                      label={action.label}
+                      leadMinutes={action.leadMinutes}
+                      matchId={action.matchId}
+                    />
                   ) : action.type === "focus_match" ? (
                     <button
                       className="buttonSecondary"

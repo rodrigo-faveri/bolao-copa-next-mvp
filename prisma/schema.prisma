@@ -21,6 +21,7 @@ model User {
   knockoutPredictions KnockoutPrediction[]
   pushSubscriptions PushSubscription[]
   pushNotificationLogs PushNotificationLog[]
+  matchAlerts UserMatchAlert[]
   notifyPickDeadlines Boolean @default(true)
   notifyResults Boolean @default(true)
   notifyRoundSummary Boolean @default(true)
@@ -119,10 +120,31 @@ model Match {
   predictions        Prediction[]
   events             MatchEvent[]
   pushNotificationLogs PushNotificationLog[]
+  userMatchAlerts    UserMatchAlert[]
 
   @@unique([group, teamA, teamB])
   @@index([startsAt])
   @@index([status])
+}
+
+model UserMatchAlert {
+  id          String   @id @default(cuid())
+  userId      String
+  matchId     String
+  kind        String   @default("pick_deadline")
+  leadMinutes Int
+  note        String?
+  source      String   @default("assistant")
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  match       Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, matchId, kind])
+  @@index([matchId])
+  @@index([userId])
+  @@index([enabled])
 }
 
 model MatchEvent {

@@ -13,6 +13,7 @@ const avatarColors = ["#116530", "#0f766e", "#1d4ed8", "#7a4d00", "#9a3412", "#6
 
 type PredictionWithMatch = Awaited<ReturnType<typeof getUserProfileData>>["predictions"][number];
 type NotificationLogWithMatch = Awaited<ReturnType<typeof getUserProfileData>>["pushNotificationLogs"][number];
+type UserMatchAlertWithMatch = Awaited<ReturnType<typeof getUserProfileData>>["matchAlerts"][number];
 
 async function getUserProfileData(email: string) {
   const user = await prisma.user.findUnique({
@@ -26,6 +27,20 @@ async function getUserProfileData(email: string) {
       notifyResults: true,
       notifyRoundSummary: true,
       notificationLeadMinutes: true,
+      matchAlerts: {
+        include: {
+          match: {
+            select: {
+              group: true,
+              startsAt: true,
+              teamA: true,
+              teamB: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 12,
+      },
       predictions: {
         include: { match: true },
         orderBy: { updatedAt: "desc" },
@@ -53,6 +68,10 @@ async function getUserProfileData(email: string) {
 
 function displayName(user: { name: string | null; nickname: string | null; id: string }) {
   return user.nickname?.trim() || user.name?.trim() || `Participante ${user.id.slice(-6)}`;
+}
+
+function alertMatchLabel(alert: UserMatchAlertWithMatch, locale: Parameters<typeof getTeamDisplayName>[1]) {
+  return `${getTeamDisplayName(alert.match.teamA, locale)} x ${getTeamDisplayName(alert.match.teamB, locale)}`;
 }
 
 function groupRoundKey(prediction: PredictionWithMatch, groupMatches: PredictionWithMatch[]) {
@@ -265,6 +284,27 @@ export default async function PerfilPage() {
             </div>
           ) : (
             <p className="muted">{copy.profile.emptyNotificationHistory}</p>
+          )}
+        </article>
+
+        <article className="profileCard">
+          <span className="badge badgeGold">{copy.profile.assistantAlerts}</span>
+          <h2>{copy.profile.assistantAlertsTitle}</h2>
+          {user.matchAlerts.length > 0 ? (
+            <div className="notificationHistory">
+              {user.matchAlerts.map((alert) => (
+                <article className="notificationHistoryItem" key={alert.id}>
+                  <div>
+                    <strong>{alertMatchLabel(alert, locale)}</strong>
+                    <p>{formatMessage(copy.profile.assistantAlertLead, { minutes: alert.leadMinutes })}</p>
+                    <small>{alert.enabled ? copy.profile.assistantAlertActive : copy.profile.assistantAlertInactive}</small>
+                  </div>
+                  <a className="buttonLink buttonSecondary" href={`/bolao?focus=${alert.matchId}#bolao-confrontos`}>{copy.profile.notificationHistoryLink}</a>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="muted">{copy.profile.emptyAssistantAlerts}</p>
           )}
         </article>
 

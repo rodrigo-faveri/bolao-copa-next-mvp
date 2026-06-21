@@ -29,6 +29,12 @@ type AssistantAction =
     type: "link";
   }
   | {
+    leadMinutes: number;
+    label: string;
+    matchId: string;
+    type: "create_alert";
+  }
+  | {
     href: string;
     label: string;
     matchId: string;
@@ -100,6 +106,15 @@ function buildFocusMatchAction(match: { id: string; teamA: string; teamB: string
     label: `Abrir ${getTeamDisplayName(match.teamA)} x ${getTeamDisplayName(match.teamB)}`,
     matchId: match.id,
     type: "focus_match",
+  };
+}
+
+function buildCreateAlertAction(match: { id: string; teamA: string; teamB: string }, leadMinutes: number): AssistantAction {
+  return {
+    label: `Criar alerta ${leadMinutes} min antes`,
+    leadMinutes,
+    matchId: match.id,
+    type: "create_alert",
   };
 }
 
@@ -205,7 +220,7 @@ async function buildAssistantContext(email: string, question: string, tools: str
   const now = new Date();
   const user = await prisma.user.findUnique({
     where: { email },
-    select: { id: true, name: true, nickname: true },
+    select: { id: true, name: true, nickname: true, notificationLeadMinutes: true },
   });
   if (!user) throw new Error("Usuario nao encontrado.");
 
@@ -390,6 +405,7 @@ async function buildAssistantContext(email: string, question: string, tools: str
 
   return {
     context: contextLines.join("\n").slice(0, 9000),
+    createAlertAction: missingPicks[0] ? buildCreateAlertAction(missingPicks[0], user.notificationLeadMinutes ?? 60) : null,
     focusMatchAction: relevantMatches[0] ? buildFocusMatchAction(relevantMatches[0]) : null,
     hasAlertPlan: uses("custom_alerts") && missingPicks.length > 0,
     hasScenario: Boolean(scenario),
@@ -456,14 +472,23 @@ function selectActionsForIntent(intent: string, tools: string[]) {
     actions.push({ href: "/simulador", label: "Abrir simulador", type: "link" });
   }
 
-  return actions.filter((action, index, list) => list.findIndex((item) => item.href === action.href) === index).slice(0, 4);
+  return actions.filter((action, index, list) => list.findIndex((item) => {
+    if (!("href" in item) || !("href" in action)) return false;
+    return item.href === action.href;
+  }) === index).slice(0, 4);
 }
 
 function mergeActions(...actionGroups: Array<Array<AssistantAction | null | undefined>>) {
   return actionGroups
     .flat()
     .filter((action): action is AssistantAction => Boolean(action))
-    .filter((action, index, list) => list.findIndex((item) => item.href === action.href && item.label === action.label) === index)
+    .filter((action, index, list) => {
+      const actionKey = "href" in action ? `${action.type}:${action.href}:${action.label}` : `${action.type}:${action.matchId}:${action.label}`;
+      return list.findIndex((item) => {
+        const itemKey = "href" in item ? `${item.type}:${item.href}:${item.label}` : `${item.type}:${item.matchId}:${item.label}`;
+        return itemKey === actionKey;
+      }) === index;
+    })
     .slice(0, 4);
 }
 
@@ -504,12 +529,13 @@ async function runAssistantGraph(email: string, question: string) {
       tools: selectToolsForIntent(classifyIntent(state.question)),
     }))
     .addNode("retrieve", async (state) => {
-      const { context, focusMatchAction, hasAlertPlan, hasScenario, sources, suggestedPickAction } = await buildAssistantContext(state.email, state.question, state.tools);
+      const { context, createAlertAction, focusMatchAction, hasAlertPlan, hasScenario, sources, suggestedPickAction } = await buildAssistantContext(state.email, state.question, state.tools);
       const shouldSuggestPick = state.intent === "pick_strategy" || state.intent === "pending_picks";
       const shouldFocusMatch = state.tools.includes("relevant_matches") || state.intent === "general" || hasAlertPlan || hasScenario;
       return {
         actions: mergeActions(
           shouldFocusMatch ? [focusMatchAction] : [],
+          hasAlertPlan ? [createAlertAction] : [],
           shouldSuggestPick ? [suggestedPickAction] : [],
           state.actions,
         ),

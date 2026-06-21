@@ -52,6 +52,7 @@ App recreativo para palpites da Copa do Mundo de 2026 entre amigos, sem dinheiro
 - Assistente IA em widget flutuante, com LangGraph, OpenRouter e RAG hibrido usando base de conhecimento, partidas, palpites, resultados, ranking e noticias recentes como contexto.
 - Assistente IA com acoes agenticas para abrir/focar confrontos citados pelo usuario, preencher sugestoes de palpite sem salvar automaticamente, montar plano de alerta e explicar cenarios de classificacao.
 - Assistente IA busca noticias especificas das selecoes citadas, combinando noticias gerais da Copa com contexto direcionado por time.
+- Planos de alerta sugeridos pela IA podem ser persistidos por usuario e aparecem no perfil.
 - Auditoria em banco para eventos sensiveis.
 - Headers de seguranca no Next.js.
 - Rate limit para salvar palpites e consultar IA.
@@ -430,4 +431,4 @@ npm run test:integration
 ## Proximas Evolucoes
 
 - Ativar embeddings reais na tabela `KnowledgeDocument` quando houver volume maior de documentos.
-- Transformar planos de alerta sugeridos pela IA em regras persistidas por usuario.
+- Permitir editar, desativar ou remover alertas personalizados criados pela IA.
