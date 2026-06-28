@@ -57,20 +57,48 @@ async function main() {
       const subscriptions = await prisma.pushSubscription.findMany({
         where: {
           user: {
-            notifyPickDeadlines: true,
+            OR: [
+              { notifyPickDeadlines: true },
+              {
+                matchAlerts: {
+                  some: {
+                    enabled: true,
+                    kind: "pick_deadline",
+                    matchId: match.id,
+                  },
+                },
+              },
+            ],
             predictions: {
               none: { matchId: match.id },
             },
           },
         },
         include: {
-          user: { select: { id: true, notificationLeadMinutes: true } },
+          user: {
+            select: {
+              id: true,
+              matchAlerts: {
+                select: { leadMinutes: true },
+                take: 1,
+                where: {
+                  enabled: true,
+                  kind: "pick_deadline",
+                  matchId: match.id,
+                },
+              },
+              notificationLeadMinutes: true,
+              notifyPickDeadlines: true,
+            },
+          },
         },
       });
 
       for (const subscription of subscriptions) {
         const deadline = new Date(match.startsAt.getTime() - PREDICTION_CLOSE_MINUTES * 60 * 1000);
-        const userReminderWindowEnd = new Date(now.getTime() + subscription.user.notificationLeadMinutes * 60 * 1000);
+        const customAlert = subscription.user.matchAlerts[0];
+        const leadMinutes = customAlert?.leadMinutes ?? subscription.user.notificationLeadMinutes;
+        const userReminderWindowEnd = new Date(now.getTime() + leadMinutes * 60 * 1000);
         if (deadline > userReminderWindowEnd) {
           skipped += 1;
           continue;

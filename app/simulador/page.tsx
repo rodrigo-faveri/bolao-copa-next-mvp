@@ -24,6 +24,13 @@ export default async function SimuladorPage() {
   const knockoutPredictions = user ? await prisma.knockoutPrediction.findMany({ where: { poolScope: "global", userId: user.id } }) : [];
   const predictionMap = new Map(predictions.map((prediction) => [prediction.matchId, prediction]));
   const knockoutWinnerMap = Object.fromEntries(knockoutPredictions.map((prediction) => [prediction.bracketMatchId, prediction.winnerTeam]));
+  const knockoutScoreMap = Object.fromEntries(knockoutPredictions.map((prediction) => [
+    prediction.bracketMatchId,
+    {
+      goalsA: prediction.homeGoals === null ? "" : String(prediction.homeGoals),
+      goalsB: prediction.awayGoals === null ? "" : String(prediction.awayGoals),
+    },
+  ]));
 
   return (
     <main className="container bolaoPage">
@@ -34,8 +41,9 @@ export default async function SimuladorPage() {
       <WorldCupSimulator
         canSave={canSave}
         enableKnockout
+        initialKnockoutScores={knockoutScoreMap}
         initialKnockoutWinners={knockoutWinnerMap}
-        knockoutVariant="cards"
+        knockoutVariant="bracket"
         locale={locale}
         saveAction={savePrediction}
         clearKnockoutAction={clearKnockoutPredictions}

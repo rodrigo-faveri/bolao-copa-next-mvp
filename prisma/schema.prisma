@@ -184,11 +184,13 @@ model KnockoutPrediction {
   poolScope      String   @default("global")
   bracketRound   String
   bracketMatchId String
-  homeLabel      String
-  awayLabel      String
-  homeTeam       String?
-  awayTeam       String?
-  winnerTeam     String
+    homeLabel      String
+    awayLabel      String
+    homeTeam       String?
+    awayTeam       String?
+    homeGoals      Int?
+    awayGoals      Int?
+    winnerTeam     String
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -262,6 +264,42 @@ model KnowledgeDocument {
   @@unique([source, sourceId])
   @@index([source])
   @@index([updatedAt])
+}
+
+model AiEvaluationRun {
+  id                String   @id @default(cuid())
+  averageScore      Float
+  totalCases        Int
+  passedCases       Int
+  failedCases       Int
+  gitCommit         String?
+  gitBranch         String?
+  embeddingsEnabled Boolean  @default(false)
+  webSearchEnabled  Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  caseResults       AiEvaluationCaseResult[]
+
+  @@index([createdAt])
+  @@index([gitCommit])
+}
+
+model AiEvaluationCaseResult {
+  id             String          @id @default(cuid())
+  runId          String
+  caseId         String
+  question       String          @db.Text
+  score          Int
+  passed         Boolean
+  minimumScore   Int
+  missingTerms   Json?
+  missingSources Json?
+  notes          Json?
+  createdAt      DateTime        @default(now())
+  run            AiEvaluationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([caseId])
+  @@index([passed])
 }
 
 model Pool {

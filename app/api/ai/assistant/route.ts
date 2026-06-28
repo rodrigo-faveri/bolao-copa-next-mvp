@@ -3,9 +3,10 @@ import { ChatOpenAI } from "@langchain/openai";
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import { z } from "zod";
 import { auth } from "../../../../auth";
+import { searchFootballWeb } from "../../../../lib/ai-web-search";
 import { getKnowledgeQueryTerms, indexMatchKnowledge, indexNewsKnowledge, retrieveKnowledge, scoreKnowledgeText } from "../../../../lib/knowledge";
 import { logger } from "../../../../lib/logger";
-import { getLatestNews, getTeamNews } from "../../../../lib/news";
+import { getLatestNews, getTeamNews, type NewsItem } from "../../../../lib/news";
 import { prisma } from "../../../../lib/prisma";
 import { assertRateLimit } from "../../../../lib/rate-limit";
 import { PREDICTION_CLOSE_MINUTES } from "../../../../lib/prediction";
@@ -281,7 +282,25 @@ async function buildAssistantContext(email: string, question: string, tools: str
   ]).catch((error) => {
     logger.warn("knowledge_index_failed", { message: error instanceof Error ? error.message : "unknown" });
   });
-  const retrievedKnowledge = await retrieveKnowledge(prisma, question, 8);
+  let retrievedKnowledge = await retrieveKnowledge(prisma, question, 8);
+  let webSearchReason: string | null = null;
+  let webSearchNews: NewsItem[] = [];
+  const shouldSearchWeb = uses("web_search") && (retrievedKnowledge.length < 3 || (retrievedKnowledge[0]?.score ?? 0) < 2);
+
+  if (shouldSearchWeb) {
+    try {
+      const webSearch = await searchFootballWeb({ question });
+      webSearchReason = webSearch.reason;
+      webSearchNews = webSearch.items;
+      if (webSearch.items.length > 0) {
+        await indexNewsKnowledge(prisma, webSearch.items);
+        retrievedKnowledge = await retrieveKnowledge(prisma, question, 8);
+      }
+    } catch (error) {
+      webSearchReason = "failed";
+      logger.warn("ai_web_search_failed", { message: error instanceof Error ? error.message : "unknown" });
+    }
+  }
 
   const predictedMatchIds = new Set(predictions.map((prediction) => prediction.matchId));
   const predictionScenarios = predictions.map((prediction) => ({
@@ -291,7 +310,7 @@ async function buildAssistantContext(email: string, question: string, tools: str
   }));
   const missingPicks = pendingMatches.filter((match) => !predictedMatchIds.has(match.id)).slice(0, 8);
   const suggestedPickMatch = missingPicks[0] ?? pendingMatches[0] ?? null;
-  const relevantNews = [...combinedNews]
+  const relevantNews = [...webSearchNews, ...combinedNews]
     .map((item) => ({
       item,
       score: scoreKnowledgeText(`${item.title} ${item.description} ${item.source}`, terms),
@@ -362,6 +381,15 @@ async function buildAssistantContext(email: string, question: string, tools: str
         : ["- Nenhuma noticia relevante carregada agora."]),
       ...(mentionedTeamNames.length > 0 ? [`Selecoes pesquisadas especificamente: ${mentionedTeamNames.join(", ")}.`] : []),
     ] : []),
+    ...(uses("web_search") ? [
+      "Busca web controlada:",
+      webSearchReason
+        ? `- Status: ${webSearchReason}. Dominios permitidos e escopo futebol/Copa aplicados.`
+        : "- Nao acionada porque a base local foi suficiente ou a pergunta nao exigiu busca externa.",
+      ...(webSearchNews.length > 0
+        ? webSearchNews.map((item) => `- [${item.source}] ${item.title}`)
+        : []),
+    ] : []),
     ...(uses("knowledge_base") ? [
       "Trechos recuperados da base de conhecimento:",
       ...(retrievedKnowledge.length > 0
@@ -400,6 +428,7 @@ async function buildAssistantContext(email: string, question: string, tools: str
   const sources: AssistantSource[] = [
     { label: "Dados internos: partidas, palpites, ranking e resultados" },
     ...retrievedKnowledge.slice(0, 5).map((item) => ({ label: item.label, url: item.url ?? undefined })),
+    ...webSearchNews.slice(0, 5).map((item) => ({ label: `${item.source}: ${item.title}`, url: item.link })),
     ...relevantNews.slice(0, 5).map((item) => ({ label: `${item.source}: ${item.title}`, url: item.link })),
   ];
 
@@ -443,9 +472,9 @@ function selectToolsForIntent(intent: string) {
   if (intent === "classification_scenarios") return ["classification_scenarios", "relevant_matches", "pending_picks", "upcoming_matches", "knowledge_base"];
   if (intent === "pending_picks") return ["pending_picks", "upcoming_matches", "knowledge_base"];
   if (intent === "ranking") return ["ranking_snapshot", "recent_results", "knowledge_base"];
-  if (intent === "news") return ["relevant_news", "knowledge_base", "relevant_matches"];
-  if (intent === "pick_strategy") return ["pending_picks", "upcoming_matches", "recent_results", "relevant_news", "knowledge_base"];
-  return ["pending_picks", "upcoming_matches", "ranking_snapshot", "relevant_news", "relevant_matches", "knowledge_base"];
+  if (intent === "news") return ["relevant_news", "web_search", "knowledge_base", "relevant_matches"];
+  if (intent === "pick_strategy") return ["pending_picks", "upcoming_matches", "recent_results", "relevant_news", "web_search", "knowledge_base"];
+  return ["pending_picks", "upcoming_matches", "ranking_snapshot", "relevant_news", "web_search", "relevant_matches", "knowledge_base"];
 }
 
 function selectActionsForIntent(intent: string, tools: string[]) {

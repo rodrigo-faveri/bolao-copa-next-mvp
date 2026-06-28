@@ -5,7 +5,7 @@ import { getCurrentLocale } from "../../lib/i18n";
 import { formatMessage, t } from "../../lib/i18n-shared";
 import { prisma } from "../../lib/prisma";
 import { getTeamDisplayName } from "../../lib/teams";
-import { saveNotificationPreferences, saveProfile } from "./actions";
+import { deleteMatchAlert, saveNotificationPreferences, saveProfile, updateMatchAlert } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -299,7 +299,29 @@ export default async function PerfilPage() {
                     <p>{formatMessage(copy.profile.assistantAlertLead, { minutes: alert.leadMinutes })}</p>
                     <small>{alert.enabled ? copy.profile.assistantAlertActive : copy.profile.assistantAlertInactive}</small>
                   </div>
-                  <a className="buttonLink buttonSecondary" href={`/bolao?focus=${alert.matchId}#bolao-confrontos`}>{copy.profile.notificationHistoryLink}</a>
+                  <div className="assistantAlertControls">
+                    <form action={updateMatchAlert} className="assistantAlertForm">
+                      <input name="alertId" type="hidden" value={alert.id} />
+                      <label>
+                        <span>{copy.profile.leadTime}</span>
+                        <select defaultValue={alert.leadMinutes} name="leadMinutes">
+                          <option value="30">{copy.profile.lead30}</option>
+                          <option value="60">{copy.profile.lead60}</option>
+                          <option value="120">{copy.profile.lead120}</option>
+                        </select>
+                      </label>
+                      <label className="assistantAlertToggle">
+                        <input defaultChecked={alert.enabled} name="enabled" type="checkbox" />
+                        <span>{copy.profile.assistantAlertActive}</span>
+                      </label>
+                      <button className="buttonSecondary" type="submit">{copy.profile.assistantAlertSave}</button>
+                    </form>
+                    <form action={deleteMatchAlert}>
+                      <input name="alertId" type="hidden" value={alert.id} />
+                      <button className="buttonDanger" type="submit">{copy.profile.assistantAlertRemove}</button>
+                    </form>
+                    <a className="buttonLink buttonSecondary" href={`/bolao?focus=${alert.matchId}#bolao-confrontos`}>{copy.profile.notificationHistoryLink}</a>
+                  </div>
                 </article>
               ))}
             </div>

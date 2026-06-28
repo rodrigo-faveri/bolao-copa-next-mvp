@@ -76,6 +76,13 @@ export default async function BolaoPage({ searchParams }: { searchParams?: Promi
     : [];
   const predictionMap = new Map(predictions.map((prediction) => [prediction.matchId, prediction]));
   const knockoutWinnerMap = Object.fromEntries(knockoutPredictions.map((prediction) => [prediction.bracketMatchId, prediction.winnerTeam]));
+  const knockoutScoreMap = Object.fromEntries(knockoutPredictions.map((prediction) => [
+    prediction.bracketMatchId,
+    {
+      goalsA: prediction.homeGoals === null ? "" : String(prediction.homeGoals),
+      goalsB: prediction.awayGoals === null ? "" : String(prediction.awayGoals),
+    },
+  ]));
   const roundMap = getMatchRoundMap(matches);
 
   return (
@@ -143,9 +150,11 @@ export default async function BolaoPage({ searchParams }: { searchParams?: Promi
           canSave={canSave}
           enableKnockout
           focusMatchId={focusMatchId}
+          initialKnockoutScores={knockoutScoreMap}
           initialKnockoutWinners={knockoutWinnerMap}
           knockoutPoolInviteCode={selectedPool?.inviteCode ?? null}
-          knockoutVariant="cards"
+          knockoutScoreInputs
+          knockoutVariant="bracket"
           locale={locale}
           saveAction={savePrediction}
           clearKnockoutAction={clearKnockoutPredictions}

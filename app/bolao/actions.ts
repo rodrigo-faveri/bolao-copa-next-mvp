@@ -20,13 +20,21 @@ const PredictionSchema = z.object({
 
 const KnockoutPredictionSchema = z.object({
   awayLabel: z.string().trim().min(1).max(40),
+  awayGoals: z.preprocess((value) => value === "" || value === null ? undefined : value, z.coerce.number().int().min(0).max(MAX_GOALS).optional()),
   awayTeam: z.string().trim().max(80).optional(),
   bracketMatchId: z.string().trim().min(2).max(60),
   bracketRound: z.string().trim().min(1).max(40),
+  homeGoals: z.preprocess((value) => value === "" || value === null ? undefined : value, z.coerce.number().int().min(0).max(MAX_GOALS).optional()),
   homeLabel: z.string().trim().min(1).max(40),
   homeTeam: z.string().trim().max(80).optional(),
   poolInviteCode: z.string().trim().max(24).optional(),
   winnerTeam: z.string().trim().min(1).max(80),
+}).refine((data) => (data.homeGoals === undefined && data.awayGoals === undefined) || (data.homeGoals !== undefined && data.awayGoals !== undefined), {
+  message: "Informe os dois placares ou deixe ambos vazios.",
+  path: ["homeGoals"],
+}).refine((data) => data.homeGoals === undefined || data.awayGoals === undefined || data.homeGoals !== data.awayGoals, {
+  message: "No mata-mata, o placar precisa ter um vencedor.",
+  path: ["homeGoals"],
 });
 
 const DeleteKnockoutPredictionSchema = z.object({
@@ -95,9 +103,11 @@ export async function saveKnockoutPrediction(formData: FormData) {
 
   const result = KnockoutPredictionSchema.safeParse({
     awayLabel: formData.get("awayLabel"),
+    awayGoals: formData.get("awayGoals"),
     awayTeam: formData.get("awayTeam") || undefined,
     bracketMatchId: formData.get("bracketMatchId"),
     bracketRound: formData.get("bracketRound"),
+    homeGoals: formData.get("homeGoals"),
     homeLabel: formData.get("homeLabel"),
     homeTeam: formData.get("homeTeam") || undefined,
     poolInviteCode: formData.get("poolInviteCode") || undefined,
@@ -107,6 +117,12 @@ export async function saveKnockoutPrediction(formData: FormData) {
 
   const { poolInviteCode, winnerTeam, ...prediction } = result.data;
   const options = [prediction.homeTeam, prediction.awayTeam].filter(Boolean);
+  if (prediction.homeGoals !== undefined && prediction.awayGoals !== undefined) {
+    const scoreWinner = prediction.homeGoals > prediction.awayGoals ? prediction.homeTeam : prediction.awayTeam;
+    if (scoreWinner && scoreWinner !== winnerTeam) {
+      throw new Error("O vencedor precisa bater com o placar informado.");
+    }
+  }
   if (options.length > 0 && !options.includes(winnerTeam)) {
     throw new Error("O vencedor precisa ser uma das seleÃ§Ãµes do confronto.");
   }
@@ -161,7 +177,9 @@ export async function saveKnockoutPrediction(formData: FormData) {
       entity: "knockout_prediction",
       entityId: prediction.bracketMatchId,
       metadata: {
+        awayGoals: prediction.awayGoals ?? null,
         bracketRound: prediction.bracketRound,
+        homeGoals: prediction.homeGoals ?? null,
         poolScope,
         winnerTeam,
       },

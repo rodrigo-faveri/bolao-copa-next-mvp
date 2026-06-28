@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "../../auth";
 import { AdminSyncFeedbackForm } from "../../components/AdminSyncFeedbackForm";
@@ -258,6 +259,10 @@ export default async function AdminPage() {
           <h2>{copy.admin.groupMatches}</h2>
         </div>
         <div className="toolbarTips">
+          <Link className="adminAiAuditButton" href="/admin/ia" aria-label="Abrir auditoria da assistente de IA">
+            <span>Auditar IA</span>
+            <small>RAG, embeddings e historico</small>
+          </Link>
           <span>{formatMessage(copy.admin.finishedCount, { count: finishedCount })}</span>
           <span>{formatMessage(copy.admin.matchesCount, { count: matches.length })}</span>
         </div>
