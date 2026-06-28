@@ -92,22 +92,22 @@ const dateFormatter = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: 
 const timeFormatter = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Sao_Paulo" });
 
 const roundOf32Template = [
-  ["1E", "3Âº"],
-  ["1I", "3Âº"],
+  ["1E", "3º"],
+  ["1I", "3º"],
   ["2A", "2B"],
   ["1F", "2C"],
   ["2K", "2L"],
   ["1H", "2J"],
-  ["1D", "3Âº"],
-  ["1G", "3Âº"],
+  ["1D", "3º"],
+  ["1G", "3º"],
   ["1C", "2F"],
   ["2E", "2I"],
-  ["1A", "3Âº"],
-  ["1L", "3Âº"],
+  ["1A", "3º"],
+  ["1L", "3º"],
   ["1J", "2H"],
   ["2D", "2G"],
-  ["1B", "3Âº"],
-  ["1K", "3Âº"],
+  ["1B", "3º"],
+  ["1K", "3º"],
 ] as const;
 const scoreDraftsStorageKey = "bolao_score_drafts_v1";
 
@@ -318,7 +318,7 @@ function buildRoundOf32(groups: SimulatorGroup[]): BracketRound {
   let thirdIndex = 0;
 
   const resolveSlot = (label: string): QualifiedSlot => {
-    if (label === "3Âº") {
+    if (label === "3º") {
       const team = bestThirds[thirdIndex]?.team;
       thirdIndex += 1;
       return { label, team };
@@ -372,23 +372,16 @@ function splitRounds(matches: SimulatorMatch[]) {
   return [sorted.slice(0, 2), sorted.slice(2, 4), sorted.slice(4, 6)];
 }
 
-function shortTeamName(team: string) {
-  return teamLabel(team)
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 3)
-    .toUpperCase();
-}
-
 export function WorldCupSimulator({
   canSave,
   clearKnockoutAction,
   deleteKnockoutAction,
   enableKnockout = false,
   focusMatchId,
+  initialKnockoutScores = {},
   initialKnockoutWinners = {},
   knockoutPoolInviteCode,
+  knockoutScoreInputs = false,
   knockoutVariant = "bracket",
   locale = "pt-BR",
   matches,
@@ -401,8 +394,10 @@ export function WorldCupSimulator({
   deleteKnockoutAction?: (formData: FormData) => void | Promise<void>;
   enableKnockout?: boolean;
   focusMatchId?: string | null;
+  initialKnockoutScores?: ScoreDrafts;
   initialKnockoutWinners?: Record<string, string>;
   knockoutPoolInviteCode?: string | null;
+  knockoutScoreInputs?: boolean;
   knockoutVariant?: KnockoutVariant;
   locale?: AppLocale;
   matches: SimulatorMatch[];
@@ -414,6 +409,7 @@ export function WorldCupSimulator({
   const [scores, setScores] = useState(() => makeInitialScores(matches));
   const [draftMatchIds, setDraftMatchIds] = useState<Set<string>>(() => new Set());
   const [roundByGroup, setRoundByGroup] = useState<Record<string, number>>({});
+  const [knockoutScores, setKnockoutScores] = useState<ScoreDrafts>(() => initialKnockoutScores);
   const [knockoutWinners, setKnockoutWinners] = useState<Record<string, string>>(() => initialKnockoutWinners);
   const [knockoutRoundIndex, setKnockoutRoundIndex] = useState(0);
   const [stageView, setStageView] = useState<StageView>("groups");
@@ -436,6 +432,9 @@ export function WorldCupSimulator({
   useEffect(() => {
     setKnockoutWinners(initialKnockoutWinners);
   }, [initialKnockoutWinners]);
+  useEffect(() => {
+    setKnockoutScores(initialKnockoutScores);
+  }, [initialKnockoutScores]);
   useEffect(() => {
     if (!canSave || !saveAction) return;
 
@@ -566,6 +565,27 @@ export function WorldCupSimulator({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groups]);
 
+  function getKnockoutScoreWinner(match: BracketMatch) {
+    const score = knockoutScores[match.id];
+    if (!score || score.goalsA === "" || score.goalsB === "") return null;
+    const homeGoals = Number(score.goalsA);
+    const awayGoals = Number(score.goalsB);
+    if (!Number.isInteger(homeGoals) || !Number.isInteger(awayGoals) || homeGoals === awayGoals) return null;
+    return homeGoals > awayGoals ? match.home.team : match.away.team;
+  }
+
+  function handleKnockoutScoreChange(match: BracketMatch, nextScore: Score) {
+    setKnockoutScores((current) => ({ ...current, [match.id]: nextScore }));
+    const scoreWinner = (() => {
+      if (nextScore.goalsA === "" || nextScore.goalsB === "") return null;
+      const homeGoals = Number(nextScore.goalsA);
+      const awayGoals = Number(nextScore.goalsB);
+      if (!Number.isInteger(homeGoals) || !Number.isInteger(awayGoals) || homeGoals === awayGoals) return null;
+      return homeGoals > awayGoals ? match.home.team : match.away.team;
+    })();
+    if (scoreWinner) setKnockoutWinners((current) => ({ ...current, [match.id]: scoreWinner }));
+  }
+
   async function chooseWinner(match: BracketMatch, team?: string) {
     if (!team) return;
     if (![match.home.team, match.away.team].includes(team)) return;
@@ -584,6 +604,11 @@ export function WorldCupSimulator({
     formData.set("homeTeam", match.home.team ?? "");
     formData.set("awayTeam", match.away.team ?? "");
     formData.set("winnerTeam", team);
+    const score = knockoutScores[match.id];
+    if (score && score.goalsA !== "" && score.goalsB !== "") {
+      formData.set("homeGoals", score.goalsA);
+      formData.set("awayGoals", score.goalsB);
+    }
     if (knockoutPoolInviteCode) formData.set("poolInviteCode", knockoutPoolInviteCode);
 
     try {
@@ -599,6 +624,11 @@ export function WorldCupSimulator({
 
   async function removeWinner(match: BracketMatch) {
     setKnockoutWinners((current) => {
+      const next = { ...current };
+      delete next[match.id];
+      return next;
+    });
+    setKnockoutScores((current) => {
       const next = { ...current };
       delete next[match.id];
       return next;
@@ -624,6 +654,7 @@ export function WorldCupSimulator({
 
   async function clearKnockoutWinners() {
     setKnockoutWinners({});
+    setKnockoutScores({});
     if (!canSave || !clearKnockoutAction) return;
 
     const feedbackKey = "knockout:clear";
@@ -790,22 +821,60 @@ export function WorldCupSimulator({
       >
         <span className="bracketSource">{slot.label}</span>
         <span className="bracketFlag">{slot.team ? flagFor(slot.team) : <span className="teamFlagPlaceholder" aria-hidden="true" />}</span>
-        <span className="bracketTeamName">{slot.team ? shortTeamName(slot.team) : "..."}</span>
+        <span className="bracketTeamName" title={slot.team ? teamLabel(slot.team, locale) : undefined}>
+          {slot.team ? teamLabel(slot.team, locale) : "..."}
+        </span>
       </button>
     );
   }
 
   function renderBracketMatch(match: BracketMatch) {
+    const saveFeedback = saveFeedbackByMatch[`knockout:${match.id}`] ?? { status: "idle" };
+    const score = knockoutScores[match.id] ?? { goalsA: "", goalsB: "" };
+    const scoreWinner = knockoutScoreInputs ? getKnockoutScoreWinner(match) : null;
+    const selectedWinner = knockoutWinners[match.id];
+    const winnerToSave = scoreWinner ?? selectedWinner;
+    const canSaveScore = Boolean(winnerToSave && match.home.team && match.away.team);
+
     return (
       <div className="bracketMatch" key={match.id}>
         {[match.home, match.away].map((slot) => renderBracketTeam(match, slot))}
+        {knockoutScoreInputs && (
+          <div className="bracketScoreRow">
+            <input
+              aria-label={`Gols de ${match.home.team ? teamLabel(match.home.team, locale) : match.home.label}`}
+              disabled={!match.home.team || !match.away.team}
+              max={MAX_GOALS}
+              min="0"
+              onChange={(event) => handleKnockoutScoreChange(match, { ...score, goalsA: event.target.value })}
+              type="number"
+              value={score.goalsA}
+            />
+            <span>x</span>
+            <input
+              aria-label={`Gols de ${match.away.team ? teamLabel(match.away.team, locale) : match.away.label}`}
+              disabled={!match.home.team || !match.away.team}
+              max={MAX_GOALS}
+              min="0"
+              onChange={(event) => handleKnockoutScoreChange(match, { ...score, goalsB: event.target.value })}
+              type="number"
+              value={score.goalsB}
+            />
+            <button disabled={!canSaveScore || saveFeedback.status === "saving"} onClick={() => chooseWinner(match, winnerToSave)} type="button">
+              {saveFeedback.status === "saving" ? copy.simulator.saving : copy.simulator.save}
+            </button>
+          </div>
+        )}
+        {saveFeedback.status === "saved" && <div className="matchSaveFeedback matchSaveSuccess" role="status">{saveFeedback.message}</div>}
+        {saveFeedback.status === "error" && <div className="matchSaveFeedback matchSaveError" role="alert">{saveFeedback.message}</div>}
       </div>
     );
   }
 
   function renderBracketColumn(round: BracketRound, start: number, end: number, side: "left" | "right") {
+    const isActiveRound = selectedKnockoutRound.id === round.id;
     return (
-      <div className={`bracketRound bracketRound${side === "left" ? "Left" : "Right"}`} key={`${round.id}-${start}-${end}`}>
+      <div className={`bracketRound bracketRound${side === "left" ? "Left" : "Right"} ${isActiveRound ? "bracketRoundActive" : ""}`} key={`${round.id}-${start}-${end}`}>
         <h3>{round.title}</h3>
         <div className="bracketMatches">
           {round.matches.slice(start, end).map((match) => renderBracketMatch(match))}
@@ -915,9 +984,9 @@ export function WorldCupSimulator({
                 </div>
 
                 <div className="roundPager">
-                  <button aria-label={formatMessage(copy.simulator.previousRound, { group })} className="roundArrow" disabled={currentRound === 0} onClick={() => setRoundByGroup((current) => ({ ...current, [group]: currentRound - 1 }))} type="button">â€¹</button>
+                  <button aria-label={formatMessage(copy.simulator.previousRound, { group })} className="roundArrow" disabled={currentRound === 0} onClick={() => setRoundByGroup((current) => ({ ...current, [group]: currentRound - 1 }))} type="button">‹</button>
                   <strong>{formatMessage(copy.simulator.roundLabel, { round: currentRound + 1 })}</strong>
-                  <button aria-label={formatMessage(copy.simulator.nextRound, { group })} className="roundArrow" disabled={currentRound === rounds.length - 1} onClick={() => setRoundByGroup((current) => ({ ...current, [group]: currentRound + 1 }))} type="button">â€º</button>
+                  <button aria-label={formatMessage(copy.simulator.nextRound, { group })} className="roundArrow" disabled={currentRound === rounds.length - 1} onClick={() => setRoundByGroup((current) => ({ ...current, [group]: currentRound + 1 }))} type="button">›</button>
                 </div>
 
                 <div className="simulatorMatches">
@@ -1067,8 +1136,8 @@ export function WorldCupSimulator({
                   {renderBracketColumn(semiFinals, 0, 1, "left")}
                 </div>
 
-                <div className="bracketCenter">
-                  <div className="trophyMark">TaÃ§a</div>
+                <div className={`bracketCenter ${selectedKnockoutRound.id === finalRound.id ? "bracketRoundActive" : ""}`}>
+                  <div className="trophyMark">Taça</div>
                   {finalRound.matches.map((match) => renderBracketMatch(match))}
                   <div className="championCard">
                     <span>{copy.simulator.champion}</span>

@@ -36,8 +36,8 @@ App recreativo para palpites da Copa do Mundo de 2026 entre amigos, sem dinheiro
 - Perfil publico com apelido e avatar por cor.
 - Historico de desempenho do usuario por rodada.
 - Simulador de fase de grupos com classificacao em tempo real.
-- Simulador de mata-mata por etapas.
-- Palpites do mata-mata persistidos no banco, inclusive por bolao privado.
+- Simulador de mata-mata por etapas em formato de chaveamento.
+- Palpites do mata-mata persistidos no banco com vencedor e placar, inclusive por bolao privado.
 - Palpites do mata-mata podem ser removidos individualmente ou limpos de uma vez.
 - Home com jogos ao vivo/proximos jogos e carrossel de noticias.
 - Pagina de noticias com filtros.
@@ -52,7 +52,12 @@ App recreativo para palpites da Copa do Mundo de 2026 entre amigos, sem dinheiro
 - Assistente IA em widget flutuante, com LangGraph, OpenRouter e RAG hibrido usando base de conhecimento, partidas, palpites, resultados, ranking e noticias recentes como contexto.
 - Assistente IA com acoes agenticas para abrir/focar confrontos citados pelo usuario, preencher sugestoes de palpite sem salvar automaticamente, montar plano de alerta e explicar cenarios de classificacao.
 - Assistente IA busca noticias especificas das selecoes citadas, combinando noticias gerais da Copa com contexto direcionado por time.
+- Assistente IA pode acionar busca web controlada via SerpAPI quando o RAG local nao encontra contexto suficiente, limitada a futebol/Copa e dominios permitidos.
 - Planos de alerta sugeridos pela IA podem ser persistidos por usuario e aparecem no perfil.
+- Alertas personalizados criados pela IA podem ser editados, desativados ou removidos no perfil.
+- RAG com embeddings reais opcionais na tabela `KnowledgeDocument`, com fallback para busca textual.
+- Tela admin de auditoria do RAG para comparar busca textual, busca semantica e fontes usadas pela IA.
+- Avaliacao automatizada da assistente com perguntas de referencia e nota de qualidade do contexto recuperado.
 - Auditoria em banco para eventos sensiveis.
 - Headers de seguranca no Next.js.
 - Rate limit para salvar palpites e consultar IA.
@@ -75,6 +80,7 @@ App recreativo para palpites da Copa do Mundo de 2026 entre amigos, sem dinheiro
 - `/perfil`: perfil publico, apelido, avatar, preferencias, historico por rodada e notificacoes recebidas.
 - `/noticias`: noticias recentes com filtros por fonte, data e busca.
 - `/admin`: registro de resultados oficiais, restrito a admins.
+- `/admin/ia`: auditoria das fontes recuperadas pela IA e comparacao entre busca textual e embeddings.
 
 ## Requisitos
 
@@ -136,12 +142,19 @@ ADMIN_EMAILS=""
 
 OPENROUTER_API_KEY=""
 OPENROUTER_MODEL="nex-agi/nex-n2-pro:free"
+EMBEDDINGS_API_KEY=""
+EMBEDDINGS_BASE_URL="https://api.openai.com/v1"
+EMBEDDINGS_MODEL="text-embedding-3-small"
 
 SERPAPI_KEY=""
 SERPAPI_RESULT_DELAY_MINUTES="120"
 SERPAPI_RESULT_MAX_MATCHES="12"
 SERPAPI_DRY_RUN="false"
 SERPAPI_DEBUG="false"
+AI_WEB_SEARCH_ENABLED="false"
+AI_WEB_SEARCH_ALLOWED_DOMAINS="fifa.com,ge.globo.com,espn.com.br,lance.com.br,uol.com.br,terra.com.br,cnnbrasil.com.br"
+AI_WEB_SEARCH_MAX_RESULTS="5"
+AI_WEB_SEARCH_CACHE_MINUTES="60"
 
 VAPID_PUBLIC_KEY=""
 VAPID_PRIVATE_KEY=""
@@ -172,6 +185,12 @@ Notas:
 - `ALLOWED_EMAILS` e `ALLOWED_EMAIL_DOMAINS` restringem quem pode entrar.
 - `ADMIN_EMAILS` define quem pode acessar `/admin`.
 - `OPENROUTER_API_KEY` e opcional. Sem chave, o app usa sugestao local.
+- `EMBEDDINGS_API_KEY` ativa embeddings reais na tabela `KnowledgeDocument`; sem chave, o RAG usa busca textual.
+- `EMBEDDINGS_BASE_URL` aceita endpoints compativeis com `/embeddings`.
+- `EMBEDDINGS_MODEL` define o modelo de embedding usado no RAG.
+- `AI_WEB_SEARCH_ENABLED="true"` permite que a assistente use SerpAPI para buscar contexto externo quando o RAG local estiver fraco.
+- `AI_WEB_SEARCH_ALLOWED_DOMAINS` limita as fontes externas permitidas. Use apenas dominios confiaveis e relacionados a futebol/Copa.
+- `AI_WEB_SEARCH_MAX_RESULTS` e `AI_WEB_SEARCH_CACHE_MINUTES` controlam custo e repeticao das buscas externas.
 - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` e `VAPID_SUBJECT` ativam Web Push real. Gere com `npx web-push generate-vapid-keys`.
 - `PUSH_REMINDER_WINDOW_MINUTES` define a janela de envio dos avisos de palpite pendente.
 - `JOB_RUNNING_STALE_MINUTES`, `JOB_RESULT_SYNC_STALE_MINUTES` e `JOB_PUSH_REMINDER_STALE_MINUTES` controlam os alertas automaticos do dashboard admin.
@@ -407,6 +426,22 @@ Ou:
 npm run check
 ```
 
+Para avaliar a qualidade do contexto recuperado pela assistente IA:
+
+```bash
+npm run ai:evaluate
+```
+
+Os casos ficam em `data/ai-evaluation-cases.json`. O script pontua termos esperados, fontes recuperadas e disponibilidade de embeddings, sem chamar LLM por padrao.
+
+Para salvar o historico no banco e comparar a qualidade por commit/branch:
+
+```bash
+npm run ai:evaluate -- --persist
+```
+
+Tambem e possivel usar `AI_EVALUATION_PERSIST=true`. As execucoes persistidas aparecem em `/admin/ia`, com media geral, casos aprovados/reprovados, commit, branch e status de embeddings.
+
 ### Testes de integracao com PostgreSQL
 
 Os testes de integracao usam um banco separado informado por `TEST_DATABASE_URL`.
@@ -430,5 +465,4 @@ npm run test:integration
 
 ## Proximas Evolucoes
 
-- Ativar embeddings reais na tabela `KnowledgeDocument` quando houver volume maior de documentos.
-- Permitir editar, desativar ou remover alertas personalizados criados pela IA.
+- Comparar automaticamente a ultima avaliacao da IA contra a execucao anterior e criar alerta quando houver queda relevante de qualidade.

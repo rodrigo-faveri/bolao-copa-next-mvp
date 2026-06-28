@@ -1,0 +1,30 @@
+[
+  {
+    "id": "deadline-alerts",
+    "question": "Quais palpites estao perto de fechar e como eu crio um alerta?",
+    "expectedTerms": ["palpite", "alerta", "fecha"],
+    "expectedSources": ["match"],
+    "minimumScore": 55
+  },
+  {
+    "id": "group-scenario",
+    "question": "Explique um cenario de classificacao do grupo A considerando resultados oficiais.",
+    "expectedTerms": ["grupo", "classificacao", "resultado"],
+    "expectedSources": ["match"],
+    "minimumScore": 55
+  },
+  {
+    "id": "team-news-context",
+    "question": "Que noticias recentes podem ajudar no palpite de Brasil?",
+    "expectedTerms": ["noticias", "brasil", "palpite"],
+    "expectedSources": ["news", "match"],
+    "minimumScore": 45
+  },
+  {
+    "id": "private-pool-rules",
+    "question": "Como funcionam regras de pontuacao por fase no bolao privado?",
+    "expectedTerms": ["bolao", "pontuacao", "fase"],
+    "expectedSources": ["match"],
+    "minimumScore": 40
+  }
+]

@@ -353,6 +353,8 @@ export const dictionary = {
       assistantAlertLead: "Avisar {minutes} min antes do fechamento.",
       assistantAlertActive: "Ativo",
       assistantAlertInactive: "Inativo",
+      assistantAlertSave: "Salvar alerta",
+      assistantAlertRemove: "Remover",
     },
     pools: {
       title: "Meus boloes",
@@ -889,6 +891,8 @@ const englishOverrides = {
     assistantAlertLead: "Notify {minutes} min before closing.",
     assistantAlertActive: "Active",
     assistantAlertInactive: "Inactive",
+    assistantAlertSave: "Save alert",
+    assistantAlertRemove: "Remove",
   },
   pools: {
     title: "My pools",
@@ -1368,6 +1372,8 @@ const spanishOverrides = {
     assistantAlertLead: "Avisar {minutes} min antes del cierre.",
     assistantAlertActive: "Activo",
     assistantAlertInactive: "Inactivo",
+    assistantAlertSave: "Guardar alerta",
+    assistantAlertRemove: "Eliminar",
   },
   pools: {
     title: "Mis grupos",

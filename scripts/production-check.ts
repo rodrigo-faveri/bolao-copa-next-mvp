@@ -16,6 +16,14 @@ const checkedEnvNames = [
   "ALLOWED_EMAIL_DOMAINS",
   "ADMIN_EMAILS",
   "OPENROUTER_API_KEY",
+  "EMBEDDINGS_API_KEY",
+  "EMBEDDINGS_BASE_URL",
+  "EMBEDDINGS_MODEL",
+  "SERPAPI_KEY",
+  "AI_WEB_SEARCH_ENABLED",
+  "AI_WEB_SEARCH_ALLOWED_DOMAINS",
+  "AI_WEB_SEARCH_MAX_RESULTS",
+  "AI_WEB_SEARCH_CACHE_MINUTES",
   "API_FOOTBALL_KEY",
   "MONITORING_WEBHOOK_URL",
   "OBSERVABILITY_PROVIDER",
@@ -220,6 +228,49 @@ if (!process.env.OPENROUTER_API_KEY) {
   warnings.push("OPENROUTER_API_KEY is empty. AI suggestions will use local fallback.");
 }
 
+if (!process.env.EMBEDDINGS_API_KEY) {
+  warnings.push("EMBEDDINGS_API_KEY is empty. RAG will use lexical search without semantic embeddings.");
+}
+
+if (process.env.EMBEDDINGS_BASE_URL) {
+  try {
+    const embeddingsUrl = new URL(process.env.EMBEDDINGS_BASE_URL);
+    if (embeddingsUrl.protocol !== "https:") {
+      errors.push("EMBEDDINGS_BASE_URL must use https:// in production.");
+    }
+  } catch {
+    errors.push("EMBEDDINGS_BASE_URL must be a valid URL.");
+  }
+}
+
+if (process.env.AI_WEB_SEARCH_ENABLED && !["true", "false"].includes(process.env.AI_WEB_SEARCH_ENABLED)) {
+  errors.push("AI_WEB_SEARCH_ENABLED must be true or false.");
+}
+
+if (process.env.AI_WEB_SEARCH_ENABLED === "true" && !process.env.SERPAPI_KEY) {
+  errors.push("AI_WEB_SEARCH_ENABLED=true requires SERPAPI_KEY.");
+}
+
+const allowedWebSearchDomains = splitEnvList(process.env.AI_WEB_SEARCH_ALLOWED_DOMAINS);
+if (process.env.AI_WEB_SEARCH_ENABLED === "true" && allowedWebSearchDomains.length === 0) {
+  errors.push("AI_WEB_SEARCH_ALLOWED_DOMAINS must contain at least one domain when AI web search is enabled.");
+}
+
+for (const domain of allowedWebSearchDomains) {
+  if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(domain.replace(/^\*\./, ""))) {
+    errors.push(`Invalid AI web search domain: ${domain}`);
+  }
+}
+
+for (const name of ["AI_WEB_SEARCH_MAX_RESULTS", "AI_WEB_SEARCH_CACHE_MINUTES"]) {
+  const value = process.env[name];
+  if (!value) continue;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    errors.push(`${name} must be a positive integer when configured.`);
+  }
+}
+
 if (!process.env.API_FOOTBALL_KEY) {
   warnings.push("API_FOOTBALL_KEY is empty. Real-time match pages will use local fallback.");
 }
@@ -242,8 +293,8 @@ const observabilityUrl = process.env.OBSERVABILITY_ENDPOINT_URL || process.env.M
 if (observabilityUrl) {
   try {
     const monitoringUrl = new URL(observabilityUrl);
-    if (!["https:", "http:"].includes(monitoringUrl.protocol)) {
-      errors.push("OBSERVABILITY_ENDPOINT_URL/MONITORING_WEBHOOK_URL must use http:// or https://.");
+    if (monitoringUrl.protocol !== "https:") {
+      errors.push("OBSERVABILITY_ENDPOINT_URL/MONITORING_WEBHOOK_URL must use https:// in production.");
     }
   } catch {
     errors.push("OBSERVABILITY_ENDPOINT_URL/MONITORING_WEBHOOK_URL must be a valid URL.");

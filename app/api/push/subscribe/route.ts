@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "../../../../auth";
 import { prisma } from "../../../../lib/prisma";
+import { assertRateLimit } from "../../../../lib/rate-limit";
 
 const PushSubscriptionSchema = z.object({
   endpoint: z.string().url(),
@@ -11,16 +12,29 @@ const PushSubscriptionSchema = z.object({
   }),
 });
 
+function jsonNoStore(body: unknown, init?: ResponseInit) {
+  const response = NextResponse.json(body, init);
+  response.headers.set("Cache-Control", "no-store");
+  return response;
+}
+
 export async function POST(request: Request) {
   const session = await auth();
   const email = session?.user?.email;
-  if (!email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!email) return jsonNoStore({ error: "Unauthorized" }, { status: 401 });
+
+  try {
+    await assertRateLimit(`push-subscribe:${email}`, 12, 60 * 1000);
+  } catch (error) {
+    return jsonNoStore({ error: error instanceof Error ? error.message : "Too many requests" }, { status: 429 });
+  }
 
   const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
-  if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+  if (!user) return jsonNoStore({ error: "User not found" }, { status: 404 });
 
-  const parsed = PushSubscriptionSchema.safeParse(await request.json());
-  if (!parsed.success) return NextResponse.json({ error: "Invalid subscription" }, { status: 400 });
+  const body = await request.json().catch(() => null);
+  const parsed = PushSubscriptionSchema.safeParse(body);
+  if (!parsed.success) return jsonNoStore({ error: "Invalid subscription" }, { status: 400 });
 
   await prisma.pushSubscription.upsert({
     where: { endpoint: parsed.data.endpoint },
@@ -39,16 +53,23 @@ export async function POST(request: Request) {
     },
   });
 
-  return NextResponse.json({ ok: true });
+  return jsonNoStore({ ok: true });
 }
 
 export async function DELETE(request: Request) {
   const session = await auth();
   const email = session?.user?.email;
-  if (!email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!email) return jsonNoStore({ error: "Unauthorized" }, { status: 401 });
 
-  const parsed = z.object({ endpoint: z.string().url() }).safeParse(await request.json());
-  if (!parsed.success) return NextResponse.json({ error: "Invalid subscription" }, { status: 400 });
+  try {
+    await assertRateLimit(`push-unsubscribe:${email}`, 20, 60 * 1000);
+  } catch (error) {
+    return jsonNoStore({ error: error instanceof Error ? error.message : "Too many requests" }, { status: 429 });
+  }
+
+  const body = await request.json().catch(() => null);
+  const parsed = z.object({ endpoint: z.string().url() }).safeParse(body);
+  if (!parsed.success) return jsonNoStore({ error: "Invalid subscription" }, { status: 400 });
 
   await prisma.pushSubscription.deleteMany({
     where: {
@@ -57,5 +78,5 @@ export async function DELETE(request: Request) {
     },
   });
 
-  return NextResponse.json({ ok: true });
+  return jsonNoStore({ ok: true });
 }
