@@ -114,8 +114,10 @@ model Match {
   startsAt           DateTime?
   status             String       @default("scheduled")
   liveUrl            String?
+  externalFixtureId  Int?
   resultGoalsA       Int?
   resultGoalsB       Int?
+  winnerTeam         String?
   finishedAt         DateTime?
   predictions        Prediction[]
   events             MatchEvent[]
@@ -125,6 +127,8 @@ model Match {
   @@unique([group, teamA, teamB])
   @@index([startsAt])
   @@index([status])
+  @@index([externalFixtureId])
+  @@index([winnerTeam])
 }
 
 model UserMatchAlert {

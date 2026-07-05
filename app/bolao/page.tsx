@@ -7,6 +7,7 @@ import { PredictionDeadlineNotifier } from "../../components/PredictionDeadlineN
 import { WorldCupSimulator } from "../../components/WorldCupSimulator";
 import { getCurrentLocale } from "../../lib/i18n";
 import { formatMessage, t } from "../../lib/i18n-shared";
+import { getFirstKnockoutMatchStartsAt } from "../../lib/knockout-schedule";
 import { isPredictionOpen, PREDICTION_CLOSE_MINUTES } from "../../lib/prediction";
 import { prisma } from "../../lib/prisma";
 import { allowUnscheduledPredictions } from "../../lib/runtime-config";
@@ -14,6 +15,8 @@ import { getMatchVenue } from "../../lib/venues";
 import { clearKnockoutPredictions, deleteKnockoutPrediction, saveKnockoutPrediction, savePrediction } from "./actions";
 
 export const dynamic = "force-dynamic";
+
+const groupStageCodes = new Set(["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"]);
 
 function getMatchRoundMap(matches: Array<{ id: string; group: string; startsAt: Date | null }>) {
   const byGroup = new Map<string, Array<{ id: string; startsAt: Date | null }>>();
@@ -50,6 +53,7 @@ export default async function BolaoPage({ searchParams }: { searchParams?: Promi
   const params = await searchParams;
   const poolInviteCode = typeof params?.bolao === "string" ? params.bolao.toUpperCase() : null;
   const focusMatchId = typeof params?.focus === "string" ? params.focus : null;
+  const phaseParam = typeof params?.fase === "string" ? params.fase.toLowerCase() : null;
   let selectedPool: { id: string; name: string; inviteCode: string } | null = null;
 
   if (poolInviteCode) {
@@ -67,6 +71,7 @@ export default async function BolaoPage({ searchParams }: { searchParams?: Promi
 
   const canSave = Boolean(email);
   const matches = await prisma.match.findMany({ orderBy: [{ group: "asc" }, { startsAt: "asc" }] });
+  const groupStageMatches = matches.filter((match) => groupStageCodes.has(match.group));
   const user = email
     ? await prisma.user.findUnique({ where: { email }, select: { id: true } })
     : null;
@@ -83,7 +88,17 @@ export default async function BolaoPage({ searchParams }: { searchParams?: Promi
       goalsB: prediction.awayGoals === null ? "" : String(prediction.awayGoals),
     },
   ]));
-  const roundMap = getMatchRoundMap(matches);
+  const roundMap = getMatchRoundMap(groupStageMatches);
+  const firstKnockoutStartsAt = getFirstKnockoutMatchStartsAt();
+  const initialStageView = focusMatchId
+    ? "groups"
+    : phaseParam === "mata-mata" || phaseParam === "knockout"
+      ? "knockout"
+      : phaseParam === "grupos" || phaseParam === "groups"
+        ? "groups"
+        : firstKnockoutStartsAt && firstKnockoutStartsAt.getTime() <= Date.now()
+          ? "knockout"
+          : "groups";
 
   return (
     <main className="container bolaoPage">
@@ -114,13 +129,13 @@ export default async function BolaoPage({ searchParams }: { searchParams?: Promi
         </section>
       )}
 
-      {matches.length === 0 && <div className="notice">{copy.bolao.noMatches}</div>}
+      {groupStageMatches.length === 0 && <div className="notice">{copy.bolao.noMatches}</div>}
 
-      {matches.length > 0 && (
+      {groupStageMatches.length > 0 && (
         <>
           <PredictionDeadlineAlerts
             locale={locale}
-            matches={matches.map((match) => ({
+            matches={groupStageMatches.map((match) => ({
               id: match.id,
               group: match.group,
               roundNumber: roundMap.get(match.id) ?? 1,
@@ -132,7 +147,7 @@ export default async function BolaoPage({ searchParams }: { searchParams?: Promi
           />
           <PredictionDeadlineNotifier
             locale={locale}
-            matches={matches.map((match) => ({
+            matches={groupStageMatches.map((match) => ({
               id: match.id,
               group: match.group,
               roundNumber: roundMap.get(match.id) ?? 1,
@@ -149,7 +164,9 @@ export default async function BolaoPage({ searchParams }: { searchParams?: Promi
         <WorldCupSimulator
           canSave={canSave}
           enableKnockout
+          enforceKnockoutDeadlines
           focusMatchId={focusMatchId}
+          initialStageView={initialStageView}
           initialKnockoutScores={knockoutScoreMap}
           initialKnockoutWinners={knockoutWinnerMap}
           knockoutPoolInviteCode={selectedPool?.inviteCode ?? null}
@@ -176,6 +193,7 @@ export default async function BolaoPage({ searchParams }: { searchParams?: Promi
               goalsB: prediction?.goalsB ?? null,
               resultGoalsA: match.resultGoalsA,
               resultGoalsB: match.resultGoalsB,
+              winnerTeam: match.winnerTeam,
               points: prediction?.points ?? null,
             };
           })}

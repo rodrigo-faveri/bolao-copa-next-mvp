@@ -5,6 +5,7 @@ import { z } from "zod";
 import { auth } from "../../auth";
 import { isAdminEmail } from "../../lib/access-control";
 import { createAuditLog } from "../../lib/audit";
+import { materializeKnockoutMatches } from "../../lib/knockout-materialization";
 import { logger } from "../../lib/logger";
 import { MAX_GOALS } from "../../lib/prediction";
 import { prisma } from "../../lib/prisma";
@@ -16,6 +17,10 @@ const ResultSchema = z.object({
   matchId: z.string().cuid(),
   goalsA: z.coerce.number().int().min(0).max(MAX_GOALS),
   goalsB: z.coerce.number().int().min(0).max(MAX_GOALS),
+  winnerTeam: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? null : value),
+    z.string().trim().max(80).nullable(),
+  ),
 });
 
 const MatchStatusSchema = z.object({
@@ -73,6 +78,7 @@ export async function saveMatchResult(formData: FormData) {
     matchId: formData.get("matchId"),
     goalsA: formData.get("goalsA"),
     goalsB: formData.get("goalsB"),
+    winnerTeam: formData.get("winnerTeam"),
   });
 
   if (!result.success) throw new Error("Resultado invalido.");
@@ -80,7 +86,7 @@ export async function saveMatchResult(formData: FormData) {
   await prisma.$transaction(async (transaction) => {
     const previousResult = await transaction.match.findUnique({
       where: { id: result.data.matchId },
-      select: { resultGoalsA: true, resultGoalsB: true, finishedAt: true },
+      select: { resultGoalsA: true, resultGoalsB: true, finishedAt: true, winnerTeam: true },
     });
 
     await setMatchResult(transaction, result.data);
@@ -93,16 +99,21 @@ export async function saveMatchResult(formData: FormData) {
         previousGoalsA: previousResult?.resultGoalsA ?? null,
         previousGoalsB: previousResult?.resultGoalsB ?? null,
         previousFinishedAt: previousResult?.finishedAt?.toISOString() ?? null,
+        previousWinnerTeam: previousResult?.winnerTeam ?? null,
         goalsA: result.data.goalsA,
         goalsB: result.data.goalsB,
+        winnerTeam: result.data.winnerTeam,
       },
     });
   });
+
+  await materializeKnockoutMatches(prisma);
 
   logger.info("admin_result_saved", {
     matchId: result.data.matchId,
     goalsA: result.data.goalsA,
     goalsB: result.data.goalsB,
+    winnerTeam: result.data.winnerTeam ?? null,
   });
 
   revalidatePath("/admin");

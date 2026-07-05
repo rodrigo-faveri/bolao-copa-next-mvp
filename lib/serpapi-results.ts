@@ -3,6 +3,7 @@ import { getTeamDisplayName, namesLookRelated, normalizeTeamName } from "./teams
 export type SerpApiMatchResult = {
   goalsA: number;
   goalsB: number;
+  winnerTeam: string | null;
   events: Array<{ minute: string; title: string; description: string }>;
   sourceStatus: string;
   query: string;
@@ -22,12 +23,17 @@ type SerpApiSportsGame = {
   teams?: Array<{
     name?: string;
     score?: string;
+    penalty_score?: number;
     goal_summary?: SerpApiGoalSummary[];
     red_cards_summary?: SerpApiCardSummary[];
   }>;
 };
 
 type SerpApiSportsResponse = {
+  organic_results?: Array<{
+    snippet?: string;
+    title?: string;
+  }>;
   sports_results?: {
     game_spotlight?: SerpApiSportsGame;
     games?: SerpApiSportsGame[];
@@ -49,6 +55,115 @@ function parseScore(value?: string) {
   if (!value) return null;
   const parsed = Number(value.replace(/[^\d-]/g, ""));
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function normalizeSearchText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/gi, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function teamAliases(team: string) {
+  return Array.from(new Set([
+    team,
+    getTeamDisplayName(team, "pt-BR"),
+    getTeamDisplayName(team, "en-US"),
+    getTeamDisplayName(team, "es-ES"),
+  ].map(normalizeSearchText).filter(Boolean)));
+}
+
+function findTeamAliasIndex(text: string, aliases: string[]) {
+  return aliases
+    .map((alias) => ({ alias, index: text.indexOf(alias) }))
+    .filter((item) => item.index >= 0)
+    .sort((a, b) => a.index - b.index)[0] ?? null;
+}
+
+function inferWinnerByVictoryPhrase(text: string, teamA: string, teamB: string) {
+  const normalized = normalizeSearchText(text);
+  const aliasesA = teamAliases(teamA);
+  const aliasesB = teamAliases(teamB);
+  const victoryWords = "(bateu?|venceu?|eliminou?|elimina|superou?|derrotou?|classificou|avancou)";
+
+  for (const winnerAlias of aliasesA) {
+    for (const loserAlias of aliasesB) {
+      if (new RegExp(`${winnerAlias}.{0,80}${victoryWords}.{0,80}${loserAlias}`).test(normalized)) return teamA;
+      if (new RegExp(`${winnerAlias}.{0,80}(nos penaltis|nas penalidades|penalty shootout).{0,80}(classificado|oitavas|quartas|semis|final)`).test(normalized)) return teamA;
+    }
+  }
+
+  for (const winnerAlias of aliasesB) {
+    for (const loserAlias of aliasesA) {
+      if (new RegExp(`${winnerAlias}.{0,80}${victoryWords}.{0,80}${loserAlias}`).test(normalized)) return teamB;
+      if (new RegExp(`${winnerAlias}.{0,80}(nos penaltis|nas penalidades|penalty shootout).{0,80}(classificado|oitavas|quartas|semis|final)`).test(normalized)) return teamB;
+    }
+  }
+
+  return null;
+}
+
+function parsePenaltyScoreFromText(text: string, teamA: string, teamB: string) {
+  const normalized = normalizeSearchText(text);
+  if (!/(penalt|penalty|shootout|\(\d+\))/.test(normalized)) return null;
+
+  const teamAHit = findTeamAliasIndex(normalized, teamAliases(teamA));
+  const teamBHit = findTeamAliasIndex(normalized, teamAliases(teamB));
+  if (!teamAHit || !teamBHit) return null;
+
+  const firstTeam = teamAHit.index < teamBHit.index ? teamA : teamB;
+  const secondTeam = firstTeam === teamA ? teamB : teamA;
+  const start = Math.min(teamAHit.index, teamBHit.index);
+  const end = Math.max(teamAHit.index + teamAHit.alias.length, teamBHit.index + teamBHit.alias.length);
+  const numbers = (normalized.slice(start, end).match(/\d+/g) ?? []).map(Number);
+  if (numbers.length < 4) return null;
+
+  let firstGoals: number | null = null;
+  let secondGoals: number | null = null;
+  let firstPenalties: number | null = null;
+  let secondPenalties: number | null = null;
+
+  const [a, b, c, d] = numbers;
+  if (a === d && b !== c) {
+    firstGoals = a;
+    secondGoals = d;
+    firstPenalties = b;
+    secondPenalties = c;
+  } else if (b === c && a !== d) {
+    firstGoals = b;
+    secondGoals = c;
+    firstPenalties = a;
+    secondPenalties = d;
+  }
+
+  if (firstGoals === null || secondGoals === null || firstPenalties === null || secondPenalties === null) return null;
+
+  const firstWinner = firstPenalties > secondPenalties;
+  const winnerTeam = firstWinner ? firstTeam : secondTeam;
+  return firstTeam === teamA
+    ? { goalsA: firstGoals, goalsB: secondGoals, winnerTeam }
+    : { goalsA: secondGoals, goalsB: firstGoals, winnerTeam };
+}
+
+function inferOrganicResult(payload: SerpApiSportsResponse, teamA: string, teamB: string) {
+  for (const item of payload.organic_results ?? []) {
+    const text = `${item.title ?? ""} ${item.snippet ?? ""}`;
+    const score = parsePenaltyScoreFromText(text, teamA, teamB);
+    if (score) return score;
+  }
+
+  return null;
+}
+
+function inferOrganicWinner(payload: SerpApiSportsResponse, teamA: string, teamB: string) {
+  for (const item of payload.organic_results ?? []) {
+    const winner = inferWinnerByVictoryPhrase(`${item.title ?? ""} ${item.snippet ?? ""}`, teamA, teamB);
+    if (winner) return winner;
+  }
+
+  return null;
 }
 
 function isFinalStatus(status?: string) {
@@ -156,7 +271,17 @@ export async function fetchSerpApiMatchResult({
   }
 
   const game = findMatchingGame(payload, teamA, teamB);
-  if (!game || !isFinalStatus(game.status)) return null;
+  if (!game || !isFinalStatus(game.status)) {
+    const organicResult = inferOrganicResult(payload, teamA, teamB);
+    if (!organicResult) return null;
+
+    return {
+      ...organicResult,
+      events: [],
+      sourceStatus: "organic_penalties",
+      query,
+    };
+  }
 
   const teams = game.teams ?? [];
   const [firstTeam, secondTeam] = teams;
@@ -167,10 +292,21 @@ export async function fetchSerpApiMatchResult({
   const firstName = firstTeam?.name ?? "";
   const secondName = secondTeam?.name ?? "";
   const isDirectOrder = namesLookRelated(teamA, firstName) && namesLookRelated(teamB, secondName);
+  const goalsA = isDirectOrder ? firstScore : secondScore;
+  const goalsB = isDirectOrder ? secondScore : firstScore;
+  const firstPenaltyScore = typeof firstTeam?.penalty_score === "number" ? firstTeam.penalty_score : null;
+  const secondPenaltyScore = typeof secondTeam?.penalty_score === "number" ? secondTeam.penalty_score : null;
+  const penaltiesWinner = goalsA === goalsB && firstPenaltyScore !== null && secondPenaltyScore !== null && firstPenaltyScore !== secondPenaltyScore
+    ? (isDirectOrder
+      ? firstPenaltyScore > secondPenaltyScore ? teamA : teamB
+      : firstPenaltyScore > secondPenaltyScore ? teamB : teamA)
+    : null;
+  const organicWinner = goalsA === goalsB && !penaltiesWinner ? inferOrganicWinner(payload, teamA, teamB) : null;
 
   return {
-    goalsA: isDirectOrder ? firstScore : secondScore,
-    goalsB: isDirectOrder ? secondScore : firstScore,
+    goalsA,
+    goalsB,
+    winnerTeam: goalsA > goalsB ? teamA : goalsB > goalsA ? teamB : penaltiesWinner ?? organicWinner,
     events: buildEvents(teams),
     sourceStatus: game.status ?? "FT",
     query,
