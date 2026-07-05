@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { auth } from "../../auth";
 import { createAuditLog } from "../../lib/audit";
+import { isKnockoutPredictionOpen } from "../../lib/knockout-schedule";
 import { prisma } from "../../lib/prisma";
 import { isPredictionOpen, MAX_GOALS } from "../../lib/prediction";
 import { assertRateLimit } from "../../lib/rate-limit";
@@ -11,6 +12,7 @@ import { allowUnscheduledPredictions } from "../../lib/runtime-config";
 
 const predictionRateLimitWindowMs = 60 * 1000;
 const predictionRateLimitMaxAttempts = 30;
+const groupStageCodes = new Set(["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"]);
 
 const PredictionSchema = z.object({
   matchId: z.string().cuid(),
@@ -63,10 +65,13 @@ export async function savePrediction(formData: FormData) {
   await prisma.$transaction(async (transaction) => {
     const [user, match] = await Promise.all([
       transaction.user.findUnique({ where: { email }, select: { id: true } }),
-      transaction.match.findUnique({ where: { id: result.data.matchId }, select: { startsAt: true } }),
+      transaction.match.findUnique({ where: { id: result.data.matchId }, select: { group: true, startsAt: true } }),
     ]);
     if (!user) throw new Error("Usuário não encontrado.");
     if (!match) throw new Error("Partida não encontrada.");
+    if (!groupStageCodes.has(match.group)) {
+      throw new Error("Palpites de mata-mata devem ser feitos na aba Mata-mata.");
+    }
     if (!isPredictionOpen(match.startsAt, new Date(), allowUnscheduledPredictions)) {
       throw new Error("Os palpites para esta partida estão encerrados.");
     }
@@ -116,6 +121,10 @@ export async function saveKnockoutPrediction(formData: FormData) {
   if (!result.success) throw new Error("Palpite do mata-mata invÃ¡lido.");
 
   const { poolInviteCode, winnerTeam, ...prediction } = result.data;
+  if (!isKnockoutPredictionOpen(prediction.bracketMatchId)) {
+    throw new Error("Os palpites para este confronto do mata-mata estao encerrados.");
+  }
+
   const options = [prediction.homeTeam, prediction.awayTeam].filter(Boolean);
   if (prediction.homeGoals !== undefined && prediction.awayGoals !== undefined) {
     const scoreWinner = prediction.homeGoals > prediction.awayGoals ? prediction.homeTeam : prediction.awayTeam;

@@ -64,6 +64,7 @@ export default async function SimuladorPage() {
             goalsB: prediction?.goalsB ?? null,
             resultGoalsA: match.resultGoalsA,
             resultGoalsB: match.resultGoalsB,
+            winnerTeam: match.winnerTeam,
             points: prediction?.points ?? null,
           };
         })}

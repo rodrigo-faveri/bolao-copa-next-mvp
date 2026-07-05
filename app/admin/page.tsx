@@ -536,6 +536,18 @@ export default async function AdminPage() {
                     type="number"
                   />
                 </label>
+                <label>
+                  <span>Classificado</span>
+                  <select
+                    aria-label={`Classificado: ${teamALabel} x ${teamBLabel}`}
+                    defaultValue={match.winnerTeam ?? ""}
+                    name="winnerTeam"
+                  >
+                    <option value="">Inferir pelo placar</option>
+                    <option value={match.teamA}>{teamALabel}</option>
+                    <option value={match.teamB}>{teamBLabel}</option>
+                  </select>
+                </label>
                 <button type="submit">{hasResult ? copy.admin.updateResult : copy.admin.saveResult}</button>
               </form>
             </article>

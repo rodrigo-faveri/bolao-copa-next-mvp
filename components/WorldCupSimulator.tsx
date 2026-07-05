@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AppLocale } from "../lib/i18n-shared";
 import { formatMessage, t } from "../lib/i18n-shared";
-import { MAX_GOALS } from "../lib/prediction";
+import { getKnockoutMatchSchedule } from "../lib/knockout-schedule";
+import { MAX_GOALS, PREDICTION_CLOSE_MINUTES } from "../lib/prediction";
 import { getTeamDisplayName, getTeamFlagUrl } from "../lib/teams";
 
 type SimulatorMatch = {
@@ -20,6 +21,7 @@ type SimulatorMatch = {
   goalsB: number | null;
   resultGoalsA: number | null;
   resultGoalsB: number | null;
+  winnerTeam?: string | null;
   points: number | null;
 };
 
@@ -92,23 +94,24 @@ const dateFormatter = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: 
 const timeFormatter = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Sao_Paulo" });
 
 const roundOf32Template = [
-  ["1E", "3º"],
-  ["1I", "3º"],
+  ["1E", "3D"],
+  ["1I", "3F"],
   ["2A", "2B"],
   ["1F", "2C"],
   ["2K", "2L"],
   ["1H", "2J"],
-  ["1D", "3º"],
-  ["1G", "3º"],
+  ["1D", "3B"],
+  ["1G", "3I"],
   ["1C", "2F"],
   ["2E", "2I"],
-  ["1A", "3º"],
-  ["1L", "3º"],
+  ["1A", "3E"],
+  ["1L", "3K"],
   ["1J", "2H"],
   ["2D", "2G"],
-  ["1B", "3º"],
-  ["1K", "3º"],
+  ["1B", "3J"],
+  ["1K", "3L"],
 ] as const;
+const groupStageCodes = new Set(["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"]);
 const scoreDraftsStorageKey = "bolao_score_drafts_v1";
 
 function flagFor(team: string) {
@@ -142,6 +145,25 @@ function formatCountdown(startsAt: Date | null, now: Date, locale: AppLocale, ha
   const minutes = Math.floor((remainingSeconds % 3600) / 60);
   const seconds = remainingSeconds % 60;
   const prefix = locale === "en-US" ? "Starts in" : locale === "es-ES" ? "Empieza en" : "Comeca em";
+
+  if (days > 0) return `${prefix} ${days}d ${hours}h ${minutes}m ${seconds}s`;
+  if (hours > 0) return `${prefix} ${hours}h ${minutes}m ${seconds}s`;
+  return `${prefix} ${minutes}m ${seconds}s`;
+}
+
+function formatDeadlineCountdown(startsAt: Date | null, now: Date, locale: AppLocale) {
+  const copy = t(locale);
+  if (!startsAt) return copy.common.undefinedSchedule;
+
+  const deadline = new Date(startsAt.getTime() - PREDICTION_CLOSE_MINUTES * 60 * 1000);
+  const remainingSeconds = Math.max(0, Math.floor((deadline.getTime() - now.getTime()) / 1000));
+  if (remainingSeconds <= 0) return locale === "en-US" ? "Pick closed" : locale === "es-ES" ? "Pronostico cerrado" : "Palpite fechado";
+
+  const days = Math.floor(remainingSeconds / 86400);
+  const hours = Math.floor((remainingSeconds % 86400) / 3600);
+  const minutes = Math.floor((remainingSeconds % 3600) / 60);
+  const seconds = remainingSeconds % 60;
+  const prefix = locale === "en-US" ? "Closes in" : locale === "es-ES" ? "Cierra en" : "Fecha em";
 
   if (days > 0) return `${prefix} ${days}d ${hours}h ${minutes}m ${seconds}s`;
   if (hours > 0) return `${prefix} ${hours}h ${minutes}m ${seconds}s`;
@@ -301,6 +323,10 @@ function sortThirdPlaces(a: Standing, b: Standing) {
   );
 }
 
+function groupFromQualifiedSlot(label: string) {
+  return label.slice(1);
+}
+
 function buildRoundOf32(groups: SimulatorGroup[]): BracketRound {
   const qualified = new Map<string, string>();
   const thirdPlaces: Standing[] = [];
@@ -315,13 +341,19 @@ function buildRoundOf32(groups: SimulatorGroup[]): BracketRound {
   }
 
   const bestThirds = thirdPlaces.sort(sortThirdPlaces).slice(0, 8);
-  let thirdIndex = 0;
+  const qualifiedThirdTeams = new Set(bestThirds.map((standing) => standing.team));
+  const thirdByGroup = new Map<string, string>();
+
+  for (const group of groups) {
+    if (!group.isComplete) continue;
+    const third = group.standings[2];
+    if (third) thirdByGroup.set(group.group, third.team);
+  }
 
   const resolveSlot = (label: string): QualifiedSlot => {
-    if (label === "3º") {
-      const team = bestThirds[thirdIndex]?.team;
-      thirdIndex += 1;
-      return { label, team };
+    if (label.startsWith("3")) {
+      const team = thirdByGroup.get(groupFromQualifiedSlot(label));
+      return { label, team: team && qualifiedThirdTeams.has(team) ? team : undefined };
     }
 
     return { label, team: qualified.get(label) };
@@ -363,6 +395,68 @@ function buildNextRound(previousRound: BracketRound, title: string, prefix: stri
   return { id: prefix, title, matches };
 }
 
+function getOfficialRoundSlotLabels(prefix: string, matchNumber: number): readonly [string, string] {
+  if (prefix === "r32") return roundOf32Template[matchNumber - 1] ?? ["", ""];
+  return [`Venc. ${matchNumber * 2 - 1}`, `Venc. ${matchNumber * 2}`];
+}
+
+function buildOfficialRound(
+  matches: SimulatorMatch[],
+  title: string,
+  groupPrefix: string,
+  idPrefix: string,
+  count: number,
+): BracketRound | null {
+  const sourceByNumber = new Map(
+    matches.flatMap((match) => {
+      const [prefix, rawNumber] = match.group.split("-");
+      const number = Number(rawNumber);
+      return prefix === groupPrefix && Number.isInteger(number) ? [[number, match] as const] : [];
+    }),
+  );
+
+  if (sourceByNumber.size === 0) return null;
+
+  return {
+    id: idPrefix,
+    title,
+    matches: Array.from({ length: count }, (_, index) => {
+      const matchNumber = index + 1;
+      const source = sourceByNumber.get(matchNumber);
+      const [homeLabel, awayLabel] = getOfficialRoundSlotLabels(idPrefix, matchNumber);
+
+      return {
+        id: `${idPrefix}-${matchNumber}`,
+        home: { label: homeLabel, team: source?.teamA },
+        away: { label: awayLabel, team: source?.teamB },
+      };
+    }),
+  };
+}
+
+function getBracketMatchIdFromGroup(group: string) {
+  const [prefix, rawNumber] = group.split("-");
+  const number = Number(rawNumber);
+  if (!Number.isInteger(number)) return null;
+
+  const idPrefixByGroup: Record<string, string> = {
+    FINAL: "final",
+    QF: "qf",
+    R16: "r16",
+    R32: "r32",
+    SF: "sf",
+  };
+  const idPrefix = idPrefixByGroup[prefix];
+  return idPrefix ? `${idPrefix}-${number}` : null;
+}
+
+function getOfficialWinner(match: SimulatorMatch) {
+  if (match.winnerTeam) return match.winnerTeam;
+  if (match.resultGoalsA === null || match.resultGoalsB === null) return null;
+  if (match.resultGoalsA === match.resultGoalsB) return null;
+  return match.resultGoalsA > match.resultGoalsB ? match.teamA : match.teamB;
+}
+
 function splitRounds(matches: SimulatorMatch[]) {
   const sorted = [...matches].sort((a, b) => {
     const timeA = a.startsAt ? new Date(a.startsAt).getTime() : Number.MAX_SAFE_INTEGER;
@@ -377,7 +471,9 @@ export function WorldCupSimulator({
   clearKnockoutAction,
   deleteKnockoutAction,
   enableKnockout = false,
+  enforceKnockoutDeadlines = false,
   focusMatchId,
+  initialStageView = "groups",
   initialKnockoutScores = {},
   initialKnockoutWinners = {},
   knockoutPoolInviteCode,
@@ -393,7 +489,9 @@ export function WorldCupSimulator({
   clearKnockoutAction?: (formData: FormData) => void | Promise<void>;
   deleteKnockoutAction?: (formData: FormData) => void | Promise<void>;
   enableKnockout?: boolean;
+  enforceKnockoutDeadlines?: boolean;
   focusMatchId?: string | null;
+  initialStageView?: StageView;
   initialKnockoutScores?: ScoreDrafts;
   initialKnockoutWinners?: Record<string, string>;
   knockoutPoolInviteCode?: string | null;
@@ -412,7 +510,7 @@ export function WorldCupSimulator({
   const [knockoutScores, setKnockoutScores] = useState<ScoreDrafts>(() => initialKnockoutScores);
   const [knockoutWinners, setKnockoutWinners] = useState<Record<string, string>>(() => initialKnockoutWinners);
   const [knockoutRoundIndex, setKnockoutRoundIndex] = useState(0);
-  const [stageView, setStageView] = useState<StageView>("groups");
+  const [stageView, setStageView] = useState<StageView>(() => enableKnockout ? initialStageView : "groups");
   const [now, setNow] = useState(() => new Date());
   const [isHydrated, setIsHydrated] = useState(false);
   const [aiAnalysisByMatch, setAiAnalysisByMatch] = useState<Record<string, MatchAiState>>({});
@@ -435,6 +533,11 @@ export function WorldCupSimulator({
   useEffect(() => {
     setKnockoutScores(initialKnockoutScores);
   }, [initialKnockoutScores]);
+  useEffect(() => {
+    if (!enableKnockout) return;
+    if (focusMatchId) return;
+    setStageView(initialStageView);
+  }, [enableKnockout, focusMatchId, initialStageView]);
   useEffect(() => {
     if (!canSave || !saveAction) return;
 
@@ -463,6 +566,7 @@ export function WorldCupSimulator({
   const groups = useMemo<SimulatorGroup[]>(() => {
     const byGroup = new Map<string, SimulatorMatch[]>();
     for (const match of matches) {
+      if (!groupStageCodes.has(match.group)) continue;
       const groupMatches = byGroup.get(match.group) ?? [];
       groupMatches.push(match);
       byGroup.set(match.group, groupMatches);
@@ -483,18 +587,61 @@ export function WorldCupSimulator({
       };
     });
   }, [matches, scores]);
+  const officialKnockoutWinners = useMemo(() => {
+    return Object.fromEntries(
+      matches.flatMap((match) => {
+        const bracketMatchId = getBracketMatchIdFromGroup(match.group);
+        const winner = getOfficialWinner(match);
+        return bracketMatchId && winner ? [[bracketMatchId, winner] as const] : [];
+      }),
+    );
+  }, [matches]);
+  const officialFinishedKnockoutMatchIds = useMemo(() => {
+    return new Set(
+      matches.flatMap((match) => {
+        const bracketMatchId = getBracketMatchIdFromGroup(match.group);
+        return bracketMatchId && match.resultGoalsA !== null && match.resultGoalsB !== null ? [bracketMatchId] : [];
+      }),
+    );
+  }, [matches]);
+  const displayKnockoutWinners = useMemo(() => {
+    const winners = { ...knockoutWinners };
+    for (const matchId of officialFinishedKnockoutMatchIds) delete winners[matchId];
+    return { ...winners, ...officialKnockoutWinners };
+  }, [knockoutWinners, officialFinishedKnockoutMatchIds, officialKnockoutWinners]);
   const bracketRounds = useMemo(() => {
-    const roundOf32 = buildRoundOf32(groups);
-    const roundOf16 = buildNextRound(roundOf32, "Oitavas", "r16", knockoutWinners);
-    const quarterFinals = buildNextRound(roundOf16, "Quartas", "qf", knockoutWinners);
-    const semiFinals = buildNextRound(quarterFinals, "Semis", "sf", knockoutWinners);
-    const final = buildNextRound(semiFinals, "Final", "final", knockoutWinners);
+    const roundOf32 = buildOfficialRound(matches, "16 avos", "R32", "r32", 16) ?? buildRoundOf32(groups);
+    const roundOf16 = buildOfficialRound(matches, "Oitavas", "R16", "r16", 8)
+      ?? buildNextRound(roundOf32, "Oitavas", "r16", displayKnockoutWinners);
+    const quarterFinals = buildOfficialRound(matches, "Quartas", "QF", "qf", 4)
+      ?? buildNextRound(roundOf16, "Quartas", "qf", displayKnockoutWinners);
+    const semiFinals = buildOfficialRound(matches, "Semis", "SF", "sf", 2)
+      ?? buildNextRound(quarterFinals, "Semis", "sf", displayKnockoutWinners);
+    const final = buildOfficialRound(matches, "Final", "FINAL", "final", 1)
+      ?? buildNextRound(semiFinals, "Final", "final", displayKnockoutWinners);
 
     return [roundOf32, roundOf16, quarterFinals, semiFinals, final];
-  }, [groups, knockoutWinners]);
+  }, [groups, matches, displayKnockoutWinners]);
   const selectedKnockoutRound = bracketRounds[knockoutRoundIndex] ?? bracketRounds[0];
   const championMatch = bracketRounds.at(-1)?.matches[0];
-  const champion = championMatch ? knockoutWinners[championMatch.id] : undefined;
+  const champion = championMatch ? displayKnockoutWinners[championMatch.id] : undefined;
+  const selectedRoundDeadlineAlerts = useMemo(() => {
+    if (!enforceKnockoutDeadlines) return [];
+
+    return selectedKnockoutRound.matches
+      .flatMap((match) => {
+        const startsAt = getKnockoutMatchSchedule(match.id)?.startsAt ?? null;
+        if (!startsAt) return [];
+        const deadline = new Date(startsAt.getTime() - PREDICTION_CLOSE_MINUTES * 60 * 1000);
+        return [{ deadline, match, startsAt }];
+      })
+      .filter((item) =>
+        item.deadline.getTime() > now.getTime()
+        && item.deadline.getTime() <= now.getTime() + 24 * 60 * 60 * 1000,
+      )
+      .sort((a, b) => a.deadline.getTime() - b.deadline.getTime())
+      .slice(0, 3);
+  }, [enforceKnockoutDeadlines, now, selectedKnockoutRound.matches]);
 
   function getBracketRound(matchId: string) {
     return bracketRounds.find((round) => round.matches.some((match) => match.id === matchId)) ?? selectedKnockoutRound;
@@ -504,6 +651,25 @@ export function WorldCupSimulator({
     const formData = new FormData();
     if (knockoutPoolInviteCode) formData.set("poolInviteCode", knockoutPoolInviteCode);
     return formData;
+  }
+
+  function getKnockoutStartsAt(matchId: string) {
+    return getKnockoutMatchSchedule(matchId)?.startsAt ?? null;
+  }
+
+  function isKnockoutOpen(matchId: string) {
+    if (!enforceKnockoutDeadlines) return true;
+    const startsAt = getKnockoutStartsAt(matchId);
+    if (!startsAt) return true;
+    return startsAt.getTime() - PREDICTION_CLOSE_MINUTES * 60 * 1000 > now.getTime();
+  }
+
+  function isKnockoutClosingSoon(matchId: string) {
+    if (!enforceKnockoutDeadlines) return false;
+    const startsAt = getKnockoutStartsAt(matchId);
+    if (!startsAt) return false;
+    const deadline = startsAt.getTime() - PREDICTION_CLOSE_MINUTES * 60 * 1000;
+    return deadline > now.getTime() && deadline <= now.getTime() + 24 * 60 * 60 * 1000;
   }
 
   function focusMatch(matchId: string) {
@@ -589,6 +755,14 @@ export function WorldCupSimulator({
   async function chooseWinner(match: BracketMatch, team?: string) {
     if (!team) return;
     if (![match.home.team, match.away.team].includes(team)) return;
+    if (!isKnockoutOpen(match.id)) {
+      showTemporarySaveFeedback(`knockout:${match.id}`, {
+        status: "error",
+        message: locale === "en-US" ? "This knockout pick is closed." : locale === "es-ES" ? "Este pronostico de eliminatorias esta cerrado." : "Este palpite do mata-mata esta fechado.",
+      });
+      return;
+    }
+
     setKnockoutWinners((current) => ({ ...current, [match.id]: team }));
     if (!canSave || !saveKnockoutAction) return;
 
@@ -809,12 +983,13 @@ export function WorldCupSimulator({
   }
 
   function renderBracketTeam(match: BracketMatch, slot: QualifiedSlot) {
-    const selectedWinner = knockoutWinners[match.id];
+    const selectedWinner = displayKnockoutWinners[match.id];
+    const pickOpen = isKnockoutOpen(match.id);
 
     return (
       <button
         className={`bracketTeam ${selectedWinner === slot.team ? "bracketTeamSelected" : ""}`}
-        disabled={!slot.team}
+        disabled={!slot.team || !pickOpen}
         key={`${match.id}-${slot.label}`}
         onClick={() => chooseWinner(match, slot.team)}
         type="button"
@@ -832,18 +1007,28 @@ export function WorldCupSimulator({
     const saveFeedback = saveFeedbackByMatch[`knockout:${match.id}`] ?? { status: "idle" };
     const score = knockoutScores[match.id] ?? { goalsA: "", goalsB: "" };
     const scoreWinner = knockoutScoreInputs ? getKnockoutScoreWinner(match) : null;
-    const selectedWinner = knockoutWinners[match.id];
+    const selectedWinner = displayKnockoutWinners[match.id];
     const winnerToSave = scoreWinner ?? selectedWinner;
-    const canSaveScore = Boolean(winnerToSave && match.home.team && match.away.team);
+    const startsAt = getKnockoutStartsAt(match.id);
+    const pickOpen = isKnockoutOpen(match.id);
+    const closingSoon = isKnockoutClosingSoon(match.id);
+    const canSaveScore = Boolean(winnerToSave && match.home.team && match.away.team && pickOpen);
 
     return (
-      <div className="bracketMatch" key={match.id}>
+      <div className={`bracketMatch ${knockoutScoreInputs ? "bracketMatchWithScore" : ""} ${!pickOpen ? "bracketMatchClosed" : closingSoon ? "bracketMatchUrgent" : ""}`} key={match.id}>
+        {enforceKnockoutDeadlines && (
+          <div className="bracketMatchMeta">
+            <span>{startsAt ? dateFormatter.format(startsAt) : copy.common.undefinedSchedule}</span>
+            <strong>{startsAt ? timeFormatter.format(startsAt) : "--:--"}</strong>
+            <em>{isHydrated ? formatDeadlineCountdown(startsAt, now, locale) : startsAt ? `${dateFormatter.format(startsAt)} ${timeFormatter.format(startsAt)}` : copy.common.undefinedSchedule}</em>
+          </div>
+        )}
         {[match.home, match.away].map((slot) => renderBracketTeam(match, slot))}
         {knockoutScoreInputs && (
           <div className="bracketScoreRow">
             <input
               aria-label={`Gols de ${match.home.team ? teamLabel(match.home.team, locale) : match.home.label}`}
-              disabled={!match.home.team || !match.away.team}
+              disabled={!match.home.team || !match.away.team || !pickOpen}
               max={MAX_GOALS}
               min="0"
               onChange={(event) => handleKnockoutScoreChange(match, { ...score, goalsA: event.target.value })}
@@ -853,7 +1038,7 @@ export function WorldCupSimulator({
             <span>x</span>
             <input
               aria-label={`Gols de ${match.away.team ? teamLabel(match.away.team, locale) : match.away.label}`}
-              disabled={!match.home.team || !match.away.team}
+              disabled={!match.home.team || !match.away.team || !pickOpen}
               max={MAX_GOALS}
               min="0"
               onChange={(event) => handleKnockoutScoreChange(match, { ...score, goalsB: event.target.value })}
@@ -871,13 +1056,17 @@ export function WorldCupSimulator({
     );
   }
 
-  function renderBracketColumn(round: BracketRound, start: number, end: number, side: "left" | "right") {
+  function renderBracketColumn(round: BracketRound, start: number, end: number, side: "left" | "right", slotSpan: number) {
     const isActiveRound = selectedKnockoutRound.id === round.id;
     return (
       <div className={`bracketRound bracketRound${side === "left" ? "Left" : "Right"} ${isActiveRound ? "bracketRoundActive" : ""}`} key={`${round.id}-${start}-${end}`}>
         <h3>{round.title}</h3>
         <div className="bracketMatches">
-          {round.matches.slice(start, end).map((match) => renderBracketMatch(match))}
+          {round.matches.slice(start, end).map((match, index) => (
+            <div className="bracketMatchSlot" key={match.id} style={{ gridRow: `${index * slotSpan + 1} / span ${slotSpan}` }}>
+              {renderBracketMatch(match)}
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -903,7 +1092,7 @@ export function WorldCupSimulator({
   }
 
   function renderKnockoutCardMatch(match: BracketMatch, index: number) {
-    const selectedWinner = knockoutWinners[match.id];
+    const selectedWinner = displayKnockoutWinners[match.id];
     const saveFeedback = saveFeedbackByMatch[`knockout:${match.id}`] ?? { status: "idle" };
 
     return (
@@ -1115,6 +1304,26 @@ export function WorldCupSimulator({
             </div>
           </div>
 
+          {selectedRoundDeadlineAlerts.length > 0 && (
+            <div className="knockoutDeadlineBanner" role="status">
+              <div>
+                <span className="badge badgeGold">{locale === "en-US" ? "Closing soon" : locale === "es-ES" ? "Cierra pronto" : "Fecha em breve"}</span>
+                <strong>
+                  {selectedRoundDeadlineAlerts.length} {locale === "en-US" ? "knockout pick(s) close soon" : locale === "es-ES" ? "pronostico(s) de eliminatorias cerca del cierre" : "palpite(s) do mata-mata perto do fechamento"}
+                </strong>
+              </div>
+              <div className="knockoutDeadlineList">
+                {selectedRoundDeadlineAlerts.map(({ match, startsAt }) => (
+                  <span key={match.id}>
+                    {match.home.team ? teamLabel(match.home.team, locale) : match.home.label} x {match.away.team ? teamLabel(match.away.team, locale) : match.away.label}
+                    {" - "}
+                    {isHydrated ? formatDeadlineCountdown(startsAt, now, locale) : `${dateFormatter.format(startsAt)} ${timeFormatter.format(startsAt)}`}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {renderKnockoutPhaseTabs()}
 
           {knockoutVariant === "cards" ? (
@@ -1130,13 +1339,18 @@ export function WorldCupSimulator({
 
               <div className="knockoutTree" aria-label="Chave do mata-mata da Copa">
                 <div className="bracketSide bracketSideLeft">
-                  {renderBracketColumn(roundOf32, 0, 8, "left")}
-                  {renderBracketColumn(roundOf16, 0, 4, "left")}
-                  {renderBracketColumn(quarterFinals, 0, 2, "left")}
-                  {renderBracketColumn(semiFinals, 0, 1, "left")}
+                  {renderBracketColumn(roundOf32, 0, 8, "left", 1)}
+                  {renderBracketColumn(roundOf16, 0, 4, "left", 2)}
+                  {renderBracketColumn(quarterFinals, 0, 2, "left", 4)}
+                  {renderBracketColumn(semiFinals, 0, 1, "left", 8)}
                 </div>
 
                 <div className={`bracketCenter ${selectedKnockoutRound.id === finalRound.id ? "bracketRoundActive" : ""}`}>
+                  <div className="bracketCenterTitle">
+                    <span>Chaveamento</span>
+                    <strong>mata-mata</strong>
+                    <em>2ª fase · 28/06 a 03/07</em>
+                  </div>
                   <div className="trophyMark">Taça</div>
                   {finalRound.matches.map((match) => renderBracketMatch(match))}
                   <div className="championCard">
@@ -1150,10 +1364,10 @@ export function WorldCupSimulator({
                 </div>
 
                 <div className="bracketSide bracketSideRight">
-                  {renderBracketColumn(semiFinals, 1, 2, "right")}
-                  {renderBracketColumn(quarterFinals, 2, 4, "right")}
-                  {renderBracketColumn(roundOf16, 4, 8, "right")}
-                  {renderBracketColumn(roundOf32, 8, 16, "right")}
+                  {renderBracketColumn(semiFinals, 1, 2, "right", 8)}
+                  {renderBracketColumn(quarterFinals, 2, 4, "right", 4)}
+                  {renderBracketColumn(roundOf16, 4, 8, "right", 2)}
+                  {renderBracketColumn(roundOf32, 8, 16, "right", 1)}
                 </div>
               </div>
             </>

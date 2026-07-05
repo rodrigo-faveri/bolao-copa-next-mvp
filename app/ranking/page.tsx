@@ -8,14 +8,18 @@ import { prisma } from "../../lib/prisma";
 
 export const dynamic = "force-dynamic";
 
+const groupStageCodes = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
+
 type RankingUser = {
   id: string;
   name: string | null;
   nickname: string | null;
   knockoutPredictions: Array<{
+    awayGoals: number | null;
     awayTeam: string | null;
     bracketMatchId: string;
     bracketRound: string;
+    homeGoals: number | null;
     homeTeam: string | null;
     winnerTeam: string;
   }>;
@@ -42,6 +46,7 @@ type FinishedKnockoutMatch = {
   resultGoalsB: number | null;
   teamA: string;
   teamB: string;
+  winnerTeam: string | null;
 };
 
 type PoolRules = {
@@ -109,32 +114,97 @@ function findFinishedKnockoutMatch(
 }
 
 function getMatchWinner(match: FinishedKnockoutMatch) {
+  if (match.winnerTeam) return match.winnerTeam;
   if (match.resultGoalsA === null || match.resultGoalsB === null || match.resultGoalsA === match.resultGoalsB) return null;
   return match.resultGoalsA > match.resultGoalsB ? match.teamA : match.teamB;
+}
+
+function getKnockoutPredictionScoreInOfficialOrder(
+  prediction: RankingUser["knockoutPredictions"][number],
+  officialMatch: FinishedKnockoutMatch,
+) {
+  if (prediction.homeGoals === null || prediction.awayGoals === null) return null;
+
+  const predictionHome = normalizeTeamName(prediction.homeTeam);
+  const predictionAway = normalizeTeamName(prediction.awayTeam);
+  const officialTeamA = normalizeTeamName(officialMatch.teamA);
+  const officialTeamB = normalizeTeamName(officialMatch.teamB);
+
+  if (predictionHome === officialTeamA && predictionAway === officialTeamB) {
+    return { goalsA: prediction.homeGoals, goalsB: prediction.awayGoals };
+  }
+
+  if (predictionHome === officialTeamB && predictionAway === officialTeamA) {
+    return { goalsA: prediction.awayGoals, goalsB: prediction.homeGoals };
+  }
+
+  return null;
+}
+
+function calculateKnockoutPredictionPoints(
+  prediction: RankingUser["knockoutPredictions"][number],
+  officialMatch: FinishedKnockoutMatch,
+  rules: PoolRules | null,
+) {
+  if (officialMatch.resultGoalsA === null || officialMatch.resultGoalsB === null) return 0;
+
+  const predictionScore = getKnockoutPredictionScoreInOfficialOrder(prediction, officialMatch);
+  if (predictionScore) {
+    return calculateRankingPoints(
+      predictionScore,
+      { goalsA: officialMatch.resultGoalsA, goalsB: officialMatch.resultGoalsB, phase: "knockout" },
+      rules,
+    );
+  }
+
+  const winner = getMatchWinner(officialMatch);
+  if (!winner) return 0;
+  return normalizeTeamName(prediction.winnerTeam) === normalizeTeamName(winner)
+    ? rules?.knockoutOutcomePoints ?? rules?.outcomePoints ?? 3
+    : 0;
+}
+
+function getKnockoutHitKind(
+  prediction: RankingUser["knockoutPredictions"][number],
+  officialMatch: FinishedKnockoutMatch,
+) {
+  if (officialMatch.resultGoalsA === null || officialMatch.resultGoalsB === null) return "outcome" as const;
+  const predictionScore = getKnockoutPredictionScoreInOfficialOrder(prediction, officialMatch);
+  if (
+    predictionScore
+    && predictionScore.goalsA === officialMatch.resultGoalsA
+    && predictionScore.goalsB === officialMatch.resultGoalsB
+  ) {
+    return "exact" as const;
+  }
+
+  return "outcome" as const;
 }
 
 function formatUserName(user: { id: string; name: string | null; nickname: string | null }) {
   return user.nickname?.trim() || user.name?.trim() || `Participante ${user.id.slice(-6)}`;
 }
 
-function buildRankingRows(users: RankingUser[], rules: PoolRules | null = null) {
+function buildRankingRows(users: RankingUser[], finishedKnockoutMatches: FinishedKnockoutMatch[], rules: PoolRules | null = null) {
   return users
     .map((user) => {
       const hits: RankingHit[] = [];
       let exactHits = 0;
       let outcomeHits = 0;
       let resolvedPredictions = 0;
+      let points = 0;
 
       for (const prediction of user.predictions) {
         const { match } = prediction;
         if (match.resultGoalsA === null || match.resultGoalsB === null) continue;
         resolvedPredictions += 1;
-        const points = calculateRankingPoints(
+        const predictionPoints = calculateRankingPoints(
           { goalsA: prediction.goalsA, goalsB: prediction.goalsB },
           { goalsA: match.resultGoalsA, goalsB: match.resultGoalsB, phase: getMatchCompetitionPhase(match) },
           rules,
         );
-        if (points <= 0) continue;
+        points += predictionPoints;
+        if (predictionPoints <= 0) continue;
 
         const isExact = prediction.goalsA === match.resultGoalsA && prediction.goalsB === match.resultGoalsB;
         const isOutcome = getOutcome(prediction.goalsA, prediction.goalsB) === getOutcome(match.resultGoalsA, match.resultGoalsB);
@@ -147,20 +217,37 @@ function buildRankingRows(users: RankingUser[], rules: PoolRules | null = null) 
           teamB: match.teamB,
           prediction: `${prediction.goalsA} x ${prediction.goalsB}`,
           result: `${match.resultGoalsA} x ${match.resultGoalsB}`,
-          points,
+          points: predictionPoints,
           kind: isExact ? "exact" : "outcome",
         });
       }
 
-      const points = user.predictions.reduce((sum, prediction) => {
-        const { match } = prediction;
-        if (match.resultGoalsA === null || match.resultGoalsB === null) return sum;
-        return sum + calculateRankingPoints(
-          { goalsA: prediction.goalsA, goalsB: prediction.goalsB },
-          { goalsA: match.resultGoalsA, goalsB: match.resultGoalsB, phase: getMatchCompetitionPhase(match) },
-          rules,
-        );
-      }, 0);
+      for (const prediction of user.knockoutPredictions) {
+        const officialMatch = findFinishedKnockoutMatch(prediction, finishedKnockoutMatches);
+        if (!officialMatch) continue;
+        resolvedPredictions += 1;
+
+        const predictionPoints = calculateKnockoutPredictionPoints(prediction, officialMatch, rules);
+        points += predictionPoints;
+        if (predictionPoints <= 0) continue;
+
+        const kind = getKnockoutHitKind(prediction, officialMatch);
+        if (kind === "exact") exactHits += 1;
+        else outcomeHits += 1;
+
+        hits.push({
+          kind,
+          matchId: prediction.bracketMatchId,
+          points: predictionPoints,
+          prediction: prediction.homeGoals !== null && prediction.awayGoals !== null
+            ? `${prediction.homeGoals} x ${prediction.awayGoals}`
+            : prediction.winnerTeam,
+          result: `${officialMatch.resultGoalsA} x ${officialMatch.resultGoalsB}`,
+          teamA: officialMatch.teamA,
+          teamB: officialMatch.teamB,
+        });
+      }
+
       const scoringHits = exactHits + outcomeHits;
 
       return {
@@ -168,7 +255,7 @@ function buildRankingRows(users: RankingUser[], rules: PoolRules | null = null) 
         name: formatUserName(user),
         position: 0,
         points,
-        predictions: user.predictions.length,
+        predictions: user.predictions.length + user.knockoutPredictions.length,
         exactHits,
         outcomeHits,
         accuracy: resolvedPredictions > 0 ? Math.round((scoringHits / resolvedPredictions) * 100) : 0,
@@ -186,40 +273,42 @@ function buildRankingRows(users: RankingUser[], rules: PoolRules | null = null) 
 }
 
 function buildKnockoutRankingRows(users: RankingUser[], finishedMatches: FinishedKnockoutMatch[], rules: PoolRules | null = null) {
-  const outcomePoints = rules?.knockoutOutcomePoints ?? rules?.outcomePoints ?? 3;
-
   return users
     .map((user) => {
       const hits: RankingHit[] = [];
       let resolvedPredictions = 0;
+      let exactHits = 0;
       let outcomeHits = 0;
+      let points = 0;
 
       for (const prediction of user.knockoutPredictions) {
         const officialMatch = findFinishedKnockoutMatch(prediction, finishedMatches);
         if (!officialMatch) continue;
-        const winner = getMatchWinner(officialMatch);
-        if (!winner) continue;
 
         resolvedPredictions += 1;
-        if (normalizeTeamName(prediction.winnerTeam) !== normalizeTeamName(winner)) continue;
+        const predictionPoints = calculateKnockoutPredictionPoints(prediction, officialMatch, rules);
+        points += predictionPoints;
+        if (predictionPoints <= 0) continue;
 
-        outcomeHits += 1;
+        const kind = getKnockoutHitKind(prediction, officialMatch);
+        if (kind === "exact") exactHits += 1;
+        else outcomeHits += 1;
         hits.push({
-          kind: "outcome",
+          kind,
           matchId: prediction.bracketMatchId,
-          points: outcomePoints,
-          prediction: prediction.winnerTeam,
-          result: winner,
+          points: predictionPoints,
+          prediction: prediction.homeGoals !== null && prediction.awayGoals !== null
+            ? `${prediction.homeGoals} x ${prediction.awayGoals}`
+            : prediction.winnerTeam,
+          result: `${officialMatch.resultGoalsA} x ${officialMatch.resultGoalsB}`,
           teamA: officialMatch.teamA,
           teamB: officialMatch.teamB,
         });
       }
 
-      const points = outcomeHits * outcomePoints;
-
       return {
-        accuracy: resolvedPredictions > 0 ? Math.round((outcomeHits / resolvedPredictions) * 100) : 0,
-        exactHits: 0,
+        accuracy: resolvedPredictions > 0 ? Math.round(((exactHits + outcomeHits) / resolvedPredictions) * 100) : 0,
+        exactHits,
         hits,
         name: formatUserName(user),
         outcomeHits,
@@ -295,6 +384,7 @@ export default async function RankingPage({ searchParams }: { searchParams?: Pro
         orderBy: [{ bracketRound: "asc" }, { updatedAt: "desc" }],
       },
       predictions: {
+        where: { match: { group: { in: groupStageCodes } } },
         include: { match: true },
         orderBy: [{ points: "desc" }, { updatedAt: "desc" }],
       },
@@ -302,7 +392,7 @@ export default async function RankingPage({ searchParams }: { searchParams?: Pro
   });
   const finishedKnockoutMatches = await prisma.match.findMany({
     where: {
-      group: { notIn: ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"] },
+      group: { notIn: groupStageCodes },
       resultGoalsA: { not: null },
       resultGoalsB: { not: null },
     },
@@ -313,10 +403,11 @@ export default async function RankingPage({ searchParams }: { searchParams?: Pro
       resultGoalsB: true,
       teamA: true,
       teamB: true,
+      winnerTeam: true,
     },
   });
 
-  const rankingRows: RankingRow[] = buildRankingRows(users, poolRules);
+  const rankingRows: RankingRow[] = buildRankingRows(users, finishedKnockoutMatches, poolRules);
   const knockoutRankingRows: RankingRow[] = buildKnockoutRankingRows(users, finishedKnockoutMatches, poolRules);
   const podium = rankingRows.slice(0, 3);
 

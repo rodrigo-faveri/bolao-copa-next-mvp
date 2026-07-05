@@ -1,7 +1,9 @@
 import type { PrismaClient } from "@prisma/client";
 import { createAuditLog } from "./audit";
+import { materializeKnockoutMatches } from "./knockout-materialization";
 import { logger } from "./logger";
 import { setMatchResult } from "./results";
+import { reconcileSerpApiCalendar } from "./serpapi-calendar";
 import { fetchSerpApiMatchDebug, fetchSerpApiMatchResult } from "./serpapi-results";
 
 export type ResultSyncSummary = {
@@ -52,6 +54,15 @@ export async function syncPendingSerpApiResults({
   }
 
   const cutoff = new Date(Date.now() - delayMinutes * 60 * 1000);
+  const materializedKnockoutMatches = dryRun ? 0 : await materializeKnockoutMatches(prisma);
+  if (materializedKnockoutMatches > 0) {
+    logger.info("knockout_matches_materialized", { count: materializedKnockoutMatches });
+  }
+  const calendarReconciliation = dryRun ? { checked: 0, updated: 0 } : await reconcileSerpApiCalendar({ prisma });
+  if (calendarReconciliation.checked > 0) {
+    logger.info("serpapi_calendar_reconciled", calendarReconciliation);
+  }
+
   const matches = await prisma.match.findMany({
     where: {
       startsAt: { lte: cutoff },
@@ -100,6 +111,7 @@ export async function syncPendingSerpApiResults({
             matchId: match.id,
             goalsA: result.goalsA,
             goalsB: result.goalsB,
+            winnerTeam: result.winnerTeam,
           });
 
           await createAuditLog(transaction, {
@@ -110,6 +122,7 @@ export async function syncPendingSerpApiResults({
             metadata: {
               goalsA: result.goalsA,
               goalsB: result.goalsB,
+              winnerTeam: result.winnerTeam,
               query: result.query,
               sourceStatus: result.sourceStatus,
             },
@@ -158,6 +171,13 @@ export async function syncPendingSerpApiResults({
         status: "success",
       },
     });
+
+    if (!dryRun && imported > 0) {
+      const materializedAfterImport = await materializeKnockoutMatches(prisma);
+      if (materializedAfterImport > 0) {
+        logger.info("knockout_matches_materialized_after_result_sync", { count: materializedAfterImport });
+      }
+    }
 
     return {
       candidates: matches.length,
