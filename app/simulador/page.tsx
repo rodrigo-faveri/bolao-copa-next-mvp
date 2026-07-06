@@ -64,6 +64,9 @@ export default async function SimuladorPage() {
             goalsB: prediction?.goalsB ?? null,
             resultGoalsA: match.resultGoalsA,
             resultGoalsB: match.resultGoalsB,
+            resultMethod: match.resultMethod,
+            penaltyGoalsA: match.penaltyGoalsA,
+            penaltyGoalsB: match.penaltyGoalsB,
             winnerTeam: match.winnerTeam,
             points: prediction?.points ?? null,
           };

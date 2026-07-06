@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { auth } from "../../auth";
 import { createAuditLog } from "../../lib/audit";
-import { isKnockoutPredictionOpen } from "../../lib/knockout-schedule";
 import { prisma } from "../../lib/prisma";
 import { isPredictionOpen, MAX_GOALS } from "../../lib/prediction";
 import { assertRateLimit } from "../../lib/rate-limit";
@@ -47,6 +46,21 @@ const DeleteKnockoutPredictionSchema = z.object({
 const ClearKnockoutPredictionsSchema = z.object({
   poolInviteCode: z.string().trim().max(24).optional(),
 });
+
+function bracketMatchIdToGroup(bracketMatchId: string) {
+  const match = /^(r32|r16|qf|sf|final)-(\d+)$/i.exec(bracketMatchId);
+  if (!match) return null;
+
+  const prefixMap: Record<string, string> = {
+    final: "FINAL",
+    qf: "QF",
+    r16: "R16",
+    r32: "R32",
+    sf: "SF",
+  };
+  const prefix = prefixMap[match[1].toLowerCase()];
+  return prefix ? `${prefix}-${match[2]}` : null;
+}
 
 export async function savePrediction(formData: FormData) {
   const session = await auth();
@@ -121,18 +135,29 @@ export async function saveKnockoutPrediction(formData: FormData) {
   if (!result.success) throw new Error("Palpite do mata-mata invÃ¡lido.");
 
   const { poolInviteCode, winnerTeam, ...prediction } = result.data;
-  if (!isKnockoutPredictionOpen(prediction.bracketMatchId)) {
+  const knockoutGroup = bracketMatchIdToGroup(prediction.bracketMatchId);
+  if (!knockoutGroup) throw new Error("Confronto de mata-mata invalido.");
+
+  const knockoutMatch = await prisma.match.findFirst({
+    where: { group: knockoutGroup },
+    select: { resultGoalsA: true, resultGoalsB: true, startsAt: true, teamA: true, teamB: true },
+  });
+  if (!knockoutMatch) throw new Error("Confronto de mata-mata ainda nao esta disponivel.");
+  if (knockoutMatch.resultGoalsA !== null || knockoutMatch.resultGoalsB !== null) {
+    throw new Error("Esta partida de mata-mata ja foi encerrada.");
+  }
+  if (!isPredictionOpen(knockoutMatch.startsAt, new Date(), false)) {
     throw new Error("Os palpites para este confronto do mata-mata estao encerrados.");
   }
 
-  const options = [prediction.homeTeam, prediction.awayTeam].filter(Boolean);
+  const options = [knockoutMatch.teamA, knockoutMatch.teamB];
   if (prediction.homeGoals !== undefined && prediction.awayGoals !== undefined) {
-    const scoreWinner = prediction.homeGoals > prediction.awayGoals ? prediction.homeTeam : prediction.awayTeam;
+    const scoreWinner = prediction.homeGoals > prediction.awayGoals ? knockoutMatch.teamA : knockoutMatch.teamB;
     if (scoreWinner && scoreWinner !== winnerTeam) {
       throw new Error("O vencedor precisa bater com o placar informado.");
     }
   }
-  if (options.length > 0 && !options.includes(winnerTeam)) {
+  if (!options.includes(winnerTeam)) {
     throw new Error("O vencedor precisa ser uma das seleÃ§Ãµes do confronto.");
   }
 

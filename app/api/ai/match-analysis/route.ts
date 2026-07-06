@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "../../../../auth";
 import { logger } from "../../../../lib/logger";
+import { getOpenRouterModels } from "../../../../lib/openrouter";
 import { MAX_GOALS } from "../../../../lib/prediction";
 import { prisma } from "../../../../lib/prisma";
 import { assertRateLimit } from "../../../../lib/rate-limit";
@@ -148,12 +149,17 @@ export async function POST(request: Request) {
     return jsonNoStore(makeLocalAnalysis(match, "sem chave do OpenRouter configurada"));
   }
 
-  const model = process.env.OPENROUTER_MODEL || "nex-agi/nex-n2-pro:free";
   const matchDate = match.startsAt
     ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Sao_Paulo" }).format(match.startsAt)
     : "horario a definir";
 
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+  let lastFailure: { body: string; model: string; status: number } | null = null;
+  let response: Response | null = null;
+  let model = "";
+
+  for (const candidateModel of await getOpenRouterModels()) {
+    model = candidateModel;
+    response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${apiKey}`,
@@ -179,20 +185,33 @@ export async function POST(request: Request) {
       response_format: { type: "json_object" },
       user: userSafetyId(email),
     }),
-  });
+    });
 
-  if (!response.ok) {
+    if (response.ok) break;
+
     const responseBody = await response.text();
-    logger.error("openrouter_match_analysis_failed", {
+    lastFailure = { body: responseBody, model, status: response.status };
+    logger.warn("openrouter_match_analysis_model_attempt_failed", {
       status: response.status,
       model,
       bodyPreview: responseBody.slice(0, 500),
     });
-    if ([402, 429, 500, 502, 503, 504].includes(response.status)) {
-      return jsonNoStore(makeLocalAnalysis(match, getOpenRouterErrorMessage(response.status, responseBody)));
+
+    if (![402, 404, 429, 500, 502, 503, 504].includes(response.status)) break;
+  }
+
+  if (!response?.ok) {
+    const responseBody = lastFailure?.body ?? "";
+    logger.error("openrouter_match_analysis_failed", {
+      status: lastFailure?.status ?? 0,
+      model: lastFailure?.model ?? model,
+      bodyPreview: responseBody.slice(0, 500),
+    });
+    if (lastFailure && [402, 404, 429, 500, 502, 503, 504].includes(lastFailure.status)) {
+      return jsonNoStore(makeLocalAnalysis(match, getOpenRouterErrorMessage(lastFailure.status, responseBody)));
     }
 
-    return jsonNoStore({ error: getOpenRouterErrorMessage(response.status, responseBody) }, { status: 502 });
+    return jsonNoStore({ error: getOpenRouterErrorMessage(lastFailure?.status ?? 502, responseBody) }, { status: 502 });
   }
 
   const rawResponse: unknown = await response.json();

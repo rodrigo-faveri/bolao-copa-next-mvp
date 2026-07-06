@@ -193,6 +193,9 @@ export default async function BolaoPage({ searchParams }: { searchParams?: Promi
               goalsB: prediction?.goalsB ?? null,
               resultGoalsA: match.resultGoalsA,
               resultGoalsB: match.resultGoalsB,
+              resultMethod: match.resultMethod,
+              penaltyGoalsA: match.penaltyGoalsA,
+              penaltyGoalsB: match.penaltyGoalsB,
               winnerTeam: match.winnerTeam,
               points: prediction?.points ?? null,
             };

@@ -29,6 +29,25 @@ function formatAverage(value: number) {
   return `${value.toFixed(1)}/100`;
 }
 
+function readMetadata(metadata: unknown) {
+  return typeof metadata === "object" && metadata !== null ? metadata as Record<string, unknown> : {};
+}
+
+function readStringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function readDiagnostics(value: unknown) {
+  return typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
+}
+
+function formatUnknown(value: unknown, fallback = "N/A") {
+  if (typeof value === "string" && value.trim()) return value;
+  if (typeof value === "number") return String(value);
+  if (typeof value === "boolean") return value ? "Sim" : "Nao";
+  return fallback;
+}
+
 function AuditResultList({
   emptyText,
   items,
@@ -89,7 +108,7 @@ export default async function AdminAiAuditPage({
   const locale = await getCurrentLocale();
   const params = await searchParams;
   const query = params?.q?.trim() || "Mexico Africa do Sul resultado palpites";
-  const [audit, evaluationRuns] = await Promise.all([
+  const [audit, evaluationRuns, assistantLogs] = await Promise.all([
     auditKnowledgeRetrieval(prisma, query, 8),
     prisma.aiEvaluationRun.findMany({
       include: {
@@ -100,6 +119,11 @@ export default async function AdminAiAuditPage({
       },
       orderBy: { createdAt: "desc" },
       take: 6,
+    }),
+    prisma.auditLog.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 9,
+      where: { action: "assistant_answer_generated" },
     }),
   ]);
 
@@ -182,6 +206,68 @@ export default async function AdminAiAuditPage({
           title="Busca semantica"
           variant="semantic"
         />
+      </section>
+
+      <section className="adminSyncCard">
+        <div className="adminSectionHeader">
+          <div>
+            <span className="badge badgeSoft">Execucoes reais</span>
+            <h2>Respostas recentes da assistente</h2>
+            <p className="muted">
+              Veja como o LangGraph roteou perguntas reais, quais ferramentas entraram em cena e se houve busca web/RAG suficiente.
+            </p>
+          </div>
+        </div>
+
+        {assistantLogs.length === 0 ? (
+          <p className="muted">Nenhuma resposta auditada ainda. Converse com a assistente para popular esta lista.</p>
+        ) : (
+          <div className="adminJobGrid">
+            {assistantLogs.map((log) => {
+              const metadata = readMetadata(log.metadata);
+              const diagnostics = readDiagnostics(metadata.diagnostics);
+              const tools = readStringArray(metadata.tools);
+              const mentionedTeams = readStringArray(diagnostics.mentionedTeams);
+              const source = metadata.source === "openrouter" ? "OpenRouter" : "Fallback local";
+
+              return (
+                <article className="adminJobCard" key={log.id}>
+                  <div>
+                    <span className={metadata.source === "openrouter" ? "badge badgeSoft" : "badge badgeGold"}>{source}</span>
+                    <h3>{formatUnknown(metadata.intent, "general")}</h3>
+                    <p className="muted">{formatUnknown(metadata.questionPreview, "Pergunta sem preview")}</p>
+                  </div>
+                  <dl>
+                    <div>
+                      <dt>Data</dt>
+                      <dd>{dateFormatter.format(log.createdAt)}</dd>
+                    </div>
+                    <div>
+                      <dt>Fontes</dt>
+                      <dd>{formatUnknown(metadata.sourceCount, "0")}</dd>
+                    </div>
+                    <div>
+                      <dt>RAG hits</dt>
+                      <dd>{formatUnknown(diagnostics.knowledgeHits, "0")}</dd>
+                    </div>
+                    <div>
+                      <dt>Busca web</dt>
+                      <dd>{formatUnknown(diagnostics.webSearchReason, "nao acionada")}</dd>
+                    </div>
+                    <div>
+                      <dt>Itens web</dt>
+                      <dd>{formatUnknown(diagnostics.webSearchItems, "0")}</dd>
+                    </div>
+                  </dl>
+                  <div className="adminJobCases">
+                    {tools.slice(0, 6).map((tool) => <span className="badge badgeSoft" key={tool}>{tool}</span>)}
+                    {mentionedTeams.map((team) => <span className="badge badgeGold" key={team}>{team}</span>)}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       <section className="adminSyncCard">

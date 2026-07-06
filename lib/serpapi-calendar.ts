@@ -74,10 +74,10 @@ function parseMonth(value: string) {
 }
 
 function parseHour(rawTime: string | null) {
-  if (!rawTime) return { hour: 16, minute: 0 };
+  if (!rawTime) return null;
   const normalized = rawTime.trim().toLowerCase();
   const match = normalized.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/);
-  if (!match) return { hour: 16, minute: 0 };
+  if (!match) return null;
 
   let hour = Number(match[1]);
   const minute = match[2] ? Number(match[2]) : 0;
@@ -89,10 +89,48 @@ function parseHour(rawTime: string | null) {
   return { hour, minute };
 }
 
+function getSaoPauloDateParts(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+  }).formatToParts(now);
+  const get = (type: string) => Number(parts.find((part) => part.type === type)?.value);
+  return { day: get("day"), month: get("month") - 1, year: get("year") };
+}
+
+function parseRelativeGameDate(rawDate: string, rawTime: string | null) {
+  const normalized = rawDate
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  const dayOffset = /\b(hoje|today)\b/.test(normalized)
+    ? 0
+    : /\b(amanha|tomorrow)\b/.test(normalized)
+      ? 1
+      : null;
+  if (dayOffset === null) return null;
+
+  const timeText = rawTime ?? rawDate;
+  const time = parseHour(timeText);
+  if (!time) return null;
+
+  const { hour, minute } = time;
+  const { day, month, year } = getSaoPauloDateParts();
+  const date = new Date(Date.UTC(year, month, day + dayOffset, hour + 3, minute));
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
 function parseGameDate(rawDate: string | null, rawTime: string | null) {
   if (!rawDate) return null;
-  const isoCandidate = new Date(rawDate);
-  if (Number.isFinite(isoCandidate.getTime())) return isoCandidate;
+  const relativeDate = parseRelativeGameDate(rawDate, rawTime);
+  if (relativeDate) return relativeDate;
+
+  if (/\d{4}/.test(rawDate)) {
+    const isoCandidate = new Date(rawDate);
+    if (Number.isFinite(isoCandidate.getTime())) return isoCandidate;
+  }
 
   const monthDay = rawDate.match(/([A-Za-z\u00c0-\u017F]{3,})\.?\s+(\d{1,2})/);
   const dayMonth = rawDate.match(/(\d{1,2})\s+(?:de\s+)?([A-Za-z\u00c0-\u017F]{3,})/);
@@ -103,7 +141,10 @@ function parseGameDate(rawDate: string | null, rawTime: string | null) {
       : null;
   if (!match || match.month === null || !Number.isInteger(match.day)) return null;
 
-  const { hour, minute } = parseHour(rawTime);
+  const time = parseHour(rawTime ?? rawDate);
+  if (!time) return null;
+
+  const { hour, minute } = time;
   return new Date(Date.UTC(2026, match.month, match.day, hour + 3, minute));
 }
 

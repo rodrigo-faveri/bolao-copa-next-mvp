@@ -156,6 +156,10 @@ function formatAuditAction(action: string, metadata: unknown, locale: AppLocale)
   if (action === "pool_rules_updated") return copy.admin.auditPoolRulesUpdated;
   if (action === "pool_invite_regenerated") return copy.admin.auditInviteRegenerated;
   if (action === "pool_member_removed") return copy.admin.auditMemberRemoved;
+  if (action === "assistant_answer_generated") {
+    const source = details.source === "openrouter" ? "OpenRouter" : "fallback local";
+    return `Assistente IA respondeu via ${source}`;
+  }
   if (action.endsWith("_denied")) return copy.admin.auditDenied;
   if (action === "serpapi_result_imported") return "SerpAPI result imported";
 
@@ -547,6 +551,41 @@ export default async function AdminPage() {
                     <option value={match.teamA}>{teamALabel}</option>
                     <option value={match.teamB}>{teamBLabel}</option>
                   </select>
+                </label>
+                <label>
+                  <span>Decisao</span>
+                  <select
+                    aria-label={`Decisao: ${teamALabel} x ${teamBLabel}`}
+                    defaultValue={match.resultMethod ?? ""}
+                    name="resultMethod"
+                  >
+                    <option value="">Inferir</option>
+                    <option value="regular">Tempo normal</option>
+                    <option value="extra_time">Prorrogacao</option>
+                    <option value="penalties">Penaltis</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Penaltis {teamALabel}</span>
+                  <input
+                    aria-label={`Penaltis ${teamALabel}`}
+                    defaultValue={match.penaltyGoalsA ?? ""}
+                    max={30}
+                    min="0"
+                    name="penaltyGoalsA"
+                    type="number"
+                  />
+                </label>
+                <label>
+                  <span>Penaltis {teamBLabel}</span>
+                  <input
+                    aria-label={`Penaltis ${teamBLabel}`}
+                    defaultValue={match.penaltyGoalsB ?? ""}
+                    max={30}
+                    min="0"
+                    name="penaltyGoalsB"
+                    type="number"
+                  />
                 </label>
                 <button type="submit">{hasResult ? copy.admin.updateResult : copy.admin.saveResult}</button>
               </form>
