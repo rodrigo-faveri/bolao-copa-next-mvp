@@ -141,7 +141,7 @@ ALLOWED_EMAIL_DOMAINS=""
 ADMIN_EMAILS=""
 
 OPENROUTER_API_KEY=""
-OPENROUTER_MODEL="nex-agi/nex-n2-pro:free"
+OPENROUTER_MODEL="meta-llama/llama-3.3-70b-instruct:free"
 EMBEDDINGS_API_KEY=""
 EMBEDDINGS_BASE_URL="https://api.openai.com/v1"
 EMBEDDINGS_MODEL="text-embedding-3-small"
@@ -152,6 +152,7 @@ SERPAPI_RESULT_MAX_MATCHES="12"
 SERPAPI_DRY_RUN="false"
 SERPAPI_DEBUG="false"
 SERPAPI_CALENDAR_RECONCILE="true"
+SERPAPI_REQUIRE_SECONDARY_CONFIRMATION="false"
 AI_WEB_SEARCH_ENABLED="false"
 AI_WEB_SEARCH_ALLOWED_DOMAINS="fifa.com,ge.globo.com,espn.com.br,lance.com.br,uol.com.br,terra.com.br,cnnbrasil.com.br"
 AI_WEB_SEARCH_MAX_RESULTS="5"
@@ -193,6 +194,7 @@ Notas:
 - `AI_WEB_SEARCH_ALLOWED_DOMAINS` limita as fontes externas permitidas. Use apenas dominios confiaveis e relacionados a futebol/Copa.
 - `AI_WEB_SEARCH_MAX_RESULTS` e `AI_WEB_SEARCH_CACHE_MINUTES` controlam custo e repeticao das buscas externas.
 - `SERPAPI_CALENDAR_RECONCILE="true"` tenta validar horarios dos jogos pendentes com SerpAPI antes de buscar placares.
+- `SERPAPI_REQUIRE_SECONDARY_CONFIRMATION="true"` exige que o resultado da SerpAPI tenha confirmacao em outra fonte organica da busca antes de salvar.
 - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` e `VAPID_SUBJECT` ativam Web Push real. Gere com `npx web-push generate-vapid-keys`.
 - `PUSH_REMINDER_WINDOW_MINUTES` define a janela de envio dos avisos de palpite pendente.
 - `JOB_RUNNING_STALE_MINUTES`, `JOB_RESULT_SYNC_STALE_MINUTES` e `JOB_PUSH_REMINDER_STALE_MINUTES` controlam os alertas automaticos do dashboard admin.
@@ -259,7 +261,7 @@ Tambem existe sincronizacao semi-automatica pos-jogo usando SerpAPI/Google Sport
 npm run result:sync-serpapi
 ```
 
-Ela primeiro materializa confrontos do mata-mata a partir dos resultados ja conhecidos e, quando `SERPAPI_CALENDAR_RECONCILE="true"`, tenta validar os horarios dos jogos pendentes com SerpAPI/Google Sports. Depois procura partidas que ja passaram da janela configurada por `SERPAPI_RESULT_DELAY_MINUTES`, ainda nao tem resultado oficial e tenta importar o placar final. Se a resposta nao for confiavel ou nao estiver finalizada, a partida e ignorada. Quando a fonte traz gols ou cartoes no payload estruturado, esses lances sao importados automaticamente para `MatchEvent`.
+Ela primeiro materializa confrontos do mata-mata a partir dos resultados ja conhecidos e, quando `SERPAPI_CALENDAR_RECONCILE="true"`, tenta validar os horarios dos jogos pendentes com SerpAPI/Google Sports. Depois procura partidas que ja passaram da janela configurada por `SERPAPI_RESULT_DELAY_MINUTES`, ainda nao tem resultado oficial e tenta importar o placar final. Se a resposta nao for confiavel ou nao estiver finalizada, a partida e ignorada. Quando a fonte traz gols ou cartoes no payload estruturado, esses lances sao importados automaticamente para `MatchEvent`. O importador tambem tenta confirmar placar/vencedor em resultados organicos da busca e registra essas fontes no audit log; se `SERPAPI_REQUIRE_SECONDARY_CONFIRMATION="true"`, resultados sem segunda confirmacao sao ignorados.
 
 Para testar sem salvar no banco:
 
@@ -278,6 +280,7 @@ SERPAPI_RESULT_MAX_MATCHES="12"
 SERPAPI_DRY_RUN="false"
 SERPAPI_DEBUG="false"
 SERPAPI_CALENDAR_RECONCILE="true"
+SERPAPI_REQUIRE_SECONDARY_CONFIRMATION="false"
 ```
 
 Use `data/results.example.csv` como modelo. O CSV aceita `match_id` ou a combinacao `group`, `team_a`, `team_b`.
@@ -357,7 +360,7 @@ Fluxo:
 Modelo padrao:
 
 ```env
-OPENROUTER_MODEL="nex-agi/nex-n2-pro:free"
+OPENROUTER_MODEL="meta-llama/llama-3.3-70b-instruct:free"
 ```
 
 Voce pode trocar por outro modelo disponivel no OpenRouter, preferencialmente com sufixo `:free` para testes.

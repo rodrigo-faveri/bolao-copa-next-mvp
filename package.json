@@ -19,6 +19,7 @@
     "result:set": "tsx scripts/set-result.ts",
     "result:import": "tsx scripts/import-results.ts",
     "result:sync-serpapi": "tsx scripts/sync-serpapi-results.ts",
+    "knockout:prune": "tsx scripts/prune-knockout-predictions.ts",
     "ai:evaluate": "tsx scripts/evaluate-ai-assistant.ts",
     "push:pending-picks": "tsx scripts/send-pending-pick-pushes.ts",
     "push:results": "tsx scripts/send-result-pushes.ts"

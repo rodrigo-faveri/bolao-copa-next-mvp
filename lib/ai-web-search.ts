@@ -99,11 +99,14 @@ function isFootballScoped(question: string) {
   return footballTerms.some((term) => normalized.includes(term.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()));
 }
 
-function buildScopedQuery(question: string, allowedDomains: string[]) {
-  const terms = getKnowledgeQueryTerms(question).slice(0, 10);
+function buildScopedQuery(question: string, allowedDomains: string[], focusTerms: string[] = []) {
+  const terms = Array.from(new Set([
+    ...getKnowledgeQueryTerms(question),
+    ...focusTerms.flatMap((term) => getKnowledgeQueryTerms(term)),
+  ])).slice(0, 12);
   const safeQuestion = terms.length > 0 ? terms.join(" ") : question.slice(0, 120);
   const domainClause = allowedDomains.map((domain) => `site:${domain}`).join(" OR ");
-  return `(${safeQuestion}) (Copa do Mundo 2026 OR futebol OR FIFA OR selecao) (${domainClause})`;
+  return `(${safeQuestion}) (Copa do Mundo 2026 OR futebol OR FIFA OR selecao OR escalacao OR lesao) (${domainClause})`;
 }
 
 function normalizeDate(value?: string) {
@@ -125,22 +128,26 @@ function toNewsItem(item: SerpApiSearchResult, sourceFallback: string): NewsItem
 }
 
 export async function searchFootballWeb({
+  focusTerms = [],
+  forceFootballScope = false,
   question,
 }: {
+  focusTerms?: string[];
+  forceFootballScope?: boolean;
   question: string;
 }) {
   if (!isAiWebSearchEnabled()) {
     return { items: [] as NewsItem[], reason: "disabled" as const };
   }
-  if (!isFootballScoped(question)) {
+  if (!forceFootballScope && !isFootballScoped(question)) {
     return { items: [] as NewsItem[], reason: "out_of_scope" as const };
   }
 
   const allowedDomains = getAiWebSearchAllowedDomains();
   const maxResults = Math.min(readPositiveInt("AI_WEB_SEARCH_MAX_RESULTS", 5), 10);
   const cacheMinutes = Math.min(readPositiveInt("AI_WEB_SEARCH_CACHE_MINUTES", 60), 24 * 60);
-  const query = buildScopedQuery(question, allowedDomains);
-  const cacheKey = `${allowedDomains.join(",")}:${maxResults}:${query}`;
+  const query = buildScopedQuery(question, allowedDomains, focusTerms);
+  const cacheKey = `${allowedDomains.join(",")}:${maxResults}:${focusTerms.join("|")}:${query}`;
   const cached = cache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     return { items: cached.items, reason: "cache" as const };

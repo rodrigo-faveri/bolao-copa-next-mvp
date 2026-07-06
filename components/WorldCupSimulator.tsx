@@ -6,7 +6,7 @@ import type { AppLocale } from "../lib/i18n-shared";
 import { formatMessage, t } from "../lib/i18n-shared";
 import { getKnockoutMatchSchedule } from "../lib/knockout-schedule";
 import { MAX_GOALS, PREDICTION_CLOSE_MINUTES } from "../lib/prediction";
-import { getTeamDisplayName, getTeamFlagUrl } from "../lib/teams";
+import { getTeamDisplayName, getTeamFlagUrl, normalizeTeamName } from "../lib/teams";
 
 type SimulatorMatch = {
   id: string;
@@ -21,6 +21,9 @@ type SimulatorMatch = {
   goalsB: number | null;
   resultGoalsA: number | null;
   resultGoalsB: number | null;
+  resultMethod?: string | null;
+  penaltyGoalsA?: number | null;
+  penaltyGoalsB?: number | null;
   winnerTeam?: string | null;
   points: number | null;
 };
@@ -406,6 +409,7 @@ function buildOfficialRound(
   groupPrefix: string,
   idPrefix: string,
   count: number,
+  fallbackRound?: BracketRound,
 ): BracketRound | null {
   const sourceByNumber = new Map(
     matches.flatMap((match) => {
@@ -415,7 +419,7 @@ function buildOfficialRound(
     }),
   );
 
-  if (sourceByNumber.size === 0) return null;
+  if (sourceByNumber.size === 0 && !fallbackRound) return null;
 
   return {
     id: idPrefix,
@@ -424,11 +428,12 @@ function buildOfficialRound(
       const matchNumber = index + 1;
       const source = sourceByNumber.get(matchNumber);
       const [homeLabel, awayLabel] = getOfficialRoundSlotLabels(idPrefix, matchNumber);
+      const fallbackMatch = fallbackRound?.matches[index];
 
       return {
         id: `${idPrefix}-${matchNumber}`,
-        home: { label: homeLabel, team: source?.teamA },
-        away: { label: awayLabel, team: source?.teamB },
+        home: { label: source ? homeLabel : fallbackMatch?.home.label ?? homeLabel, team: source?.teamA ?? fallbackMatch?.home.team },
+        away: { label: source ? awayLabel : fallbackMatch?.away.label ?? awayLabel, team: source?.teamB ?? fallbackMatch?.away.team },
       };
     }),
   };
@@ -455,6 +460,13 @@ function getOfficialWinner(match: SimulatorMatch) {
   if (match.resultGoalsA === null || match.resultGoalsB === null) return null;
   if (match.resultGoalsA === match.resultGoalsB) return null;
   return match.resultGoalsA > match.resultGoalsB ? match.teamA : match.teamB;
+}
+
+function formatResultMethod(method: string | null | undefined, locale: AppLocale) {
+  if (method === "penalties") return locale === "en-US" ? "penalties" : locale === "es-ES" ? "penaltis" : "penaltis";
+  if (method === "extra_time") return locale === "en-US" ? "extra time" : locale === "es-ES" ? "prorroga" : "prorrogacao";
+  if (method === "regular") return locale === "en-US" ? "regular time" : locale === "es-ES" ? "tiempo normal" : "tempo normal";
+  return locale === "en-US" ? "after a draw" : locale === "es-ES" ? "apos empate" : "apos empate";
 }
 
 function splitRounds(matches: SimulatorMatch[]) {
@@ -534,8 +546,7 @@ export function WorldCupSimulator({
     setKnockoutScores(initialKnockoutScores);
   }, [initialKnockoutScores]);
   useEffect(() => {
-    if (!enableKnockout) return;
-    if (focusMatchId) return;
+    if (!enableKnockout || focusMatchId) return;
     setStageView(initialStageView);
   }, [enableKnockout, focusMatchId, initialStageView]);
   useEffect(() => {
@@ -604,6 +615,25 @@ export function WorldCupSimulator({
       }),
     );
   }, [matches]);
+  const officialEliminatedKnockoutTeams = useMemo(() => {
+    return new Set(
+      matches.flatMap((match) => {
+        const winner = getOfficialWinner(match);
+        if (!winner) return [];
+        return [match.teamA, match.teamB]
+          .filter((team) => normalizeTeamName(team) !== normalizeTeamName(winner))
+          .map((team) => normalizeTeamName(team));
+      }),
+    );
+  }, [matches]);
+  const officialKnockoutMatchByBracketId = useMemo(() => {
+    return new Map(
+      matches.flatMap((match) => {
+        const bracketMatchId = getBracketMatchIdFromGroup(match.group);
+        return bracketMatchId ? [[bracketMatchId, match] as const] : [];
+      }),
+    );
+  }, [matches]);
   const displayKnockoutWinners = useMemo(() => {
     const winners = { ...knockoutWinners };
     for (const matchId of officialFinishedKnockoutMatchIds) delete winners[matchId];
@@ -611,20 +641,39 @@ export function WorldCupSimulator({
   }, [knockoutWinners, officialFinishedKnockoutMatchIds, officialKnockoutWinners]);
   const bracketRounds = useMemo(() => {
     const roundOf32 = buildOfficialRound(matches, "16 avos", "R32", "r32", 16) ?? buildRoundOf32(groups);
-    const roundOf16 = buildOfficialRound(matches, "Oitavas", "R16", "r16", 8)
-      ?? buildNextRound(roundOf32, "Oitavas", "r16", displayKnockoutWinners);
-    const quarterFinals = buildOfficialRound(matches, "Quartas", "QF", "qf", 4)
-      ?? buildNextRound(roundOf16, "Quartas", "qf", displayKnockoutWinners);
-    const semiFinals = buildOfficialRound(matches, "Semis", "SF", "sf", 2)
-      ?? buildNextRound(quarterFinals, "Semis", "sf", displayKnockoutWinners);
-    const final = buildOfficialRound(matches, "Final", "FINAL", "final", 1)
-      ?? buildNextRound(semiFinals, "Final", "final", displayKnockoutWinners);
+    const projectedRoundOf16 = buildNextRound(roundOf32, "Oitavas", "r16", displayKnockoutWinners);
+    const roundOf16 = buildOfficialRound(matches, "Oitavas", "R16", "r16", 8, projectedRoundOf16) ?? projectedRoundOf16;
+    const projectedQuarterFinals = buildNextRound(roundOf16, "Quartas", "qf", displayKnockoutWinners);
+    const quarterFinals = buildOfficialRound(matches, "Quartas", "QF", "qf", 4, projectedQuarterFinals) ?? projectedQuarterFinals;
+    const projectedSemiFinals = buildNextRound(quarterFinals, "Semis", "sf", displayKnockoutWinners);
+    const semiFinals = buildOfficialRound(matches, "Semis", "SF", "sf", 2, projectedSemiFinals) ?? projectedSemiFinals;
+    const projectedFinal = buildNextRound(semiFinals, "Final", "final", displayKnockoutWinners);
+    const final = buildOfficialRound(matches, "Final", "FINAL", "final", 1, projectedFinal) ?? projectedFinal;
 
     return [roundOf32, roundOf16, quarterFinals, semiFinals, final];
   }, [groups, matches, displayKnockoutWinners]);
   const selectedKnockoutRound = bracketRounds[knockoutRoundIndex] ?? bracketRounds[0];
   const championMatch = bracketRounds.at(-1)?.matches[0];
-  const champion = championMatch ? displayKnockoutWinners[championMatch.id] : undefined;
+  const champion = championMatch ? getValidKnockoutWinner(championMatch, displayKnockoutWinners) : undefined;
+  const invalidKnockoutPicks = useMemo(() => {
+    const matchById = new Map(bracketRounds.flatMap((round) => round.matches.map((match) => [match.id, match] as const)));
+
+    return Object.entries(knockoutWinners).flatMap(([matchId, winner]) => {
+      if (officialFinishedKnockoutMatchIds.has(matchId)) return [];
+      const officialMatch = officialKnockoutMatchByBracketId.get(matchId);
+      const normalizedWinner = normalizeTeamName(winner);
+      if (officialMatch) {
+        const officialTeams = [officialMatch.teamA, officialMatch.teamB].map((team) => normalizeTeamName(team));
+        return officialTeams.includes(normalizedWinner) ? [] : [{ matchId, winner }];
+      }
+      if (officialEliminatedKnockoutTeams.has(normalizedWinner)) return [{ matchId, winner }];
+      const match = matchById.get(matchId);
+      if (!match) return [];
+      const projectedTeams = [match.home.team, match.away.team].flatMap((team) => team ? [normalizeTeamName(team)] : []);
+      if (projectedTeams.length < 2) return [];
+      return projectedTeams.includes(normalizedWinner) ? [] : [{ matchId, winner }];
+    });
+  }, [bracketRounds, knockoutWinners, officialEliminatedKnockoutTeams, officialFinishedKnockoutMatchIds, officialKnockoutMatchByBracketId]);
   const selectedRoundDeadlineAlerts = useMemo(() => {
     if (!enforceKnockoutDeadlines) return [];
 
@@ -645,6 +694,11 @@ export function WorldCupSimulator({
 
   function getBracketRound(matchId: string) {
     return bracketRounds.find((round) => round.matches.some((match) => match.id === matchId)) ?? selectedKnockoutRound;
+  }
+
+  function getValidKnockoutWinner(match: BracketMatch, winners = displayKnockoutWinners) {
+    const winner = winners[match.id];
+    return winner && [match.home.team, match.away.team].includes(winner) ? winner : undefined;
   }
 
   function buildKnockoutScopeFormData() {
@@ -670,6 +724,36 @@ export function WorldCupSimulator({
     if (!startsAt) return false;
     const deadline = startsAt.getTime() - PREDICTION_CLOSE_MINUTES * 60 * 1000;
     return deadline > now.getTime() && deadline <= now.getTime() + 24 * 60 * 60 * 1000;
+  }
+
+  function getKnockoutOfficialResult(matchId: string) {
+    const officialMatch = officialKnockoutMatchByBracketId.get(matchId);
+    if (!officialMatch || officialMatch.resultGoalsA === null || officialMatch.resultGoalsB === null) return null;
+    const winner = getOfficialWinner(officialMatch);
+    const method = officialMatch.resultMethod
+      ?? (officialMatch.resultGoalsA === officialMatch.resultGoalsB && winner ? "penalties" : "regular");
+    const penaltyScore = officialMatch.penaltyGoalsA !== null
+      && officialMatch.penaltyGoalsA !== undefined
+      && officialMatch.penaltyGoalsB !== null
+      && officialMatch.penaltyGoalsB !== undefined
+      ? `${officialMatch.penaltyGoalsA} x ${officialMatch.penaltyGoalsB}`
+      : null;
+    const methodLabel = formatResultMethod(method, locale);
+    const winnerLabel = winner ? teamLabel(winner, locale) : copy.simulator.toDefine;
+    const details = [
+      `${copy.simulator.resultFinal}: ${officialMatch.resultGoalsA} x ${officialMatch.resultGoalsB}`,
+      winner ? `${locale === "en-US" ? "Qualified" : locale === "es-ES" ? "Clasificado" : "Classificado"}: ${winnerLabel}` : null,
+      method ? `${locale === "en-US" ? "Decision" : locale === "es-ES" ? "Decision" : "Decisao"}: ${methodLabel}` : null,
+      penaltyScore ? `${locale === "en-US" ? "Penalties" : locale === "es-ES" ? "Penaltis" : "Penaltis"}: ${penaltyScore}` : null,
+    ].filter(Boolean).join(" | ");
+
+    return {
+      details,
+      methodLabel,
+      penaltyScore,
+      score: `${officialMatch.resultGoalsA} x ${officialMatch.resultGoalsB}`,
+      winnerLabel,
+    };
   }
 
   function focusMatch(matchId: string) {
@@ -983,7 +1067,7 @@ export function WorldCupSimulator({
   }
 
   function renderBracketTeam(match: BracketMatch, slot: QualifiedSlot) {
-    const selectedWinner = displayKnockoutWinners[match.id];
+    const selectedWinner = getValidKnockoutWinner(match);
     const pickOpen = isKnockoutOpen(match.id);
 
     return (
@@ -1006,8 +1090,9 @@ export function WorldCupSimulator({
   function renderBracketMatch(match: BracketMatch) {
     const saveFeedback = saveFeedbackByMatch[`knockout:${match.id}`] ?? { status: "idle" };
     const score = knockoutScores[match.id] ?? { goalsA: "", goalsB: "" };
+    const officialResult = getKnockoutOfficialResult(match.id);
     const scoreWinner = knockoutScoreInputs ? getKnockoutScoreWinner(match) : null;
-    const selectedWinner = displayKnockoutWinners[match.id];
+    const selectedWinner = getValidKnockoutWinner(match);
     const winnerToSave = scoreWinner ?? selectedWinner;
     const startsAt = getKnockoutStartsAt(match.id);
     const pickOpen = isKnockoutOpen(match.id);
@@ -1020,7 +1105,14 @@ export function WorldCupSimulator({
           <div className="bracketMatchMeta">
             <span>{startsAt ? dateFormatter.format(startsAt) : copy.common.undefinedSchedule}</span>
             <strong>{startsAt ? timeFormatter.format(startsAt) : "--:--"}</strong>
-            <em>{isHydrated ? formatDeadlineCountdown(startsAt, now, locale) : startsAt ? `${dateFormatter.format(startsAt)} ${timeFormatter.format(startsAt)}` : copy.common.undefinedSchedule}</em>
+            {officialResult ? (
+              <em className="bracketFinishedStatus">
+                <button className="bracketResultInfoIcon" title={officialResult.details} type="button" aria-label={officialResult.details}>i</button>
+                <span>{locale === "en-US" ? "Match finished" : locale === "es-ES" ? "Partido finalizado" : "Partida finalizada"}</span>
+              </em>
+            ) : (
+              <em>{isHydrated ? formatDeadlineCountdown(startsAt, now, locale) : startsAt ? `${dateFormatter.format(startsAt)} ${timeFormatter.format(startsAt)}` : copy.common.undefinedSchedule}</em>
+            )}
           </div>
         )}
         {[match.home, match.away].map((slot) => renderBracketTeam(match, slot))}
@@ -1092,7 +1184,7 @@ export function WorldCupSimulator({
   }
 
   function renderKnockoutCardMatch(match: BracketMatch, index: number) {
-    const selectedWinner = displayKnockoutWinners[match.id];
+    const selectedWinner = getValidKnockoutWinner(match);
     const saveFeedback = saveFeedbackByMatch[`knockout:${match.id}`] ?? { status: "idle" };
 
     return (
@@ -1318,6 +1410,23 @@ export function WorldCupSimulator({
                     {match.home.team ? teamLabel(match.home.team, locale) : match.home.label} x {match.away.team ? teamLabel(match.away.team, locale) : match.away.label}
                     {" - "}
                     {isHydrated ? formatDeadlineCountdown(startsAt, now, locale) : `${dateFormatter.format(startsAt)} ${timeFormatter.format(startsAt)}`}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {invalidKnockoutPicks.length > 0 && (
+            <div className="knockoutInvalidatedBanner" role="status">
+              <div>
+                <span className="badge badgeGold">{copy.simulator.bracketUpdated}</span>
+                <strong>{formatMessage(copy.simulator.invalidatedPicksTitle, { count: invalidKnockoutPicks.length })}</strong>
+                <p>{copy.simulator.invalidatedPicksText}</p>
+              </div>
+              <div className="knockoutInvalidatedList">
+                {invalidKnockoutPicks.slice(0, 4).map((pick) => (
+                  <span key={`${pick.matchId}-${pick.winner}`}>
+                    {formatMessage(copy.simulator.invalidatedPickItem, { team: teamLabel(pick.winner, locale) })}
                   </span>
                 ))}
               </div>

@@ -15,12 +15,18 @@ export async function setMatchResult(
     goalsA,
     goalsB,
     matchId,
+    penaltyGoalsA,
+    penaltyGoalsB,
+    resultMethod,
     winnerTeam,
   }: {
     allowFutureResult?: boolean;
     goalsA: number;
     goalsB: number;
     matchId: string;
+    penaltyGoalsA?: number | null;
+    penaltyGoalsB?: number | null;
+    resultMethod?: string | null;
     winnerTeam?: string | null;
   },
 ) {
@@ -45,6 +51,11 @@ export async function setMatchResult(
     throw new Error("Classificado invalido para esta partida.");
   }
 
+  const normalizedResultMethod = resultMethod?.trim() || (isKnockoutMatch && goalsA === goalsB && officialWinner ? "penalties" : null);
+  if ((penaltyGoalsA == null) !== (penaltyGoalsB == null)) {
+    throw new Error("Informe os dois placares de penaltis ou deixe ambos vazios.");
+  }
+
   const predictions = await transaction.prediction.findMany({ where: { matchId } });
   const updates: Prisma.PrismaPromise<unknown>[] = predictions.map((prediction) =>
     transaction.prediction.update({
@@ -58,8 +69,11 @@ export async function setMatchResult(
       where: { id: matchId },
       data: {
         finishedAt: new Date(),
+        penaltyGoalsA: penaltyGoalsA ?? null,
+        penaltyGoalsB: penaltyGoalsB ?? null,
         resultGoalsA: goalsA,
         resultGoalsB: goalsB,
+        resultMethod: normalizedResultMethod,
         status: "finished",
         winnerTeam: officialWinner,
       },

@@ -290,6 +290,8 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .assistantWidget { position: fixed; right: 22px; bottom: 22px; z-index: 80; display: grid; gap: 12px; justify-items: end; pointer-events: none; }
 .assistantWidget > * { pointer-events: auto; }
 .assistantWidgetButton { display: grid; place-items: center; width: 62px; height: 62px; padding: 0; border-radius: 999px; background: linear-gradient(135deg, #116530 0%, #07a64f 100%); color: white; box-shadow: 0 18px 38px rgb(17 101 48 / 34%); }
+.assistantWidgetButtonLoading { position: relative; box-shadow: 0 18px 38px rgb(17 101 48 / 34%), 0 0 0 8px rgb(255 216 77 / 22%); animation: assistantPulse 1.3s ease-in-out infinite; }
+.assistantWidgetButtonLoading::after { position: absolute; top: 8px; right: 8px; width: 11px; height: 11px; border: 2px solid white; border-radius: 999px; background: #ffd84d; content: ""; }
 .assistantRobotIcon { position: relative; display: grid; place-items: center; width: 34px; height: 30px; border: 2px solid rgb(255 255 255 / 86%); border-radius: 12px; background: linear-gradient(180deg, #ffffff 0%, #dff7e8 100%); box-shadow: inset 0 -4px 0 rgb(17 101 48 / 10%); }
 .assistantRobotAntenna { position: absolute; top: -11px; left: 50%; width: 2px; height: 10px; background: rgb(255 255 255 / 84%); transform: translateX(-50%); }
 .assistantRobotAntenna::before { position: absolute; top: -4px; left: 50%; width: 8px; height: 8px; border-radius: 999px; background: #ffd84d; box-shadow: 0 0 0 2px rgb(255 255 255 / 64%); content: ""; transform: translateX(-50%); }
@@ -305,6 +307,10 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .assistantWidgetPanel .assistantForm { grid-template-columns: 1fr; padding: 14px 18px 18px; }
 .assistantWidgetPanel .assistantForm textarea { min-height: 76px; }
 .assistantWidgetClose { position: absolute; top: 16px; right: 16px; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border-radius: 999px; background: #e7eee9; color: #142019; }
+@keyframes assistantPulse {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
 .resultsSummary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 18px; }
 .resultsSummary article, .resultCard { border: 1px solid #dce5df; border-radius: 22px; background: white; box-shadow: 0 12px 34px rgb(20 32 25 / 8%); }
 .resultsSummary article { display: grid; gap: 8px; padding: 20px; }
@@ -571,6 +577,11 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .knockoutDeadlineBanner strong { display: block; margin-top: 6px; color: #142019; font-size: 1.05rem; }
 .knockoutDeadlineList { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .knockoutDeadlineList span { padding: 8px 10px; border-radius: 999px; background: #fff4c7; color: #75530a; font-size: .82rem; font-weight: 900; }
+.knockoutInvalidatedBanner { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin: 16px 18px 0; padding: 14px 16px; border: 1px solid #b7ddc5; border-radius: 18px; background: linear-gradient(135deg, #f1fff5 0%, #ffffff 100%); box-shadow: 0 12px 26px rgb(20 32 25 / 7%); }
+.knockoutInvalidatedBanner strong { display: block; margin-top: 6px; color: #0c5d2e; font-size: 1.05rem; }
+.knockoutInvalidatedBanner p { margin: 4px 0 0; max-width: 620px; color: #617068; font-size: .92rem; }
+.knockoutInvalidatedList { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.knockoutInvalidatedList span { padding: 8px 10px; border-radius: 999px; background: #e7f8ed; color: #0c5d2e; font-size: .82rem; font-weight: 900; }
 .knockoutPhaseTabs { display: flex; gap: 10px; padding: 16px 22px; overflow-x: auto; border-bottom: 1px solid #dce5df; background: white; }
 .knockoutPhaseTab { flex: 0 0 auto; padding: 10px 14px; border: 1px solid #dce5df; border-radius: 999px; background: #f7faf8; color: #617068; font-size: .8rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
 .knockoutPhaseTabActive { border-color: #07a64f; background: #116530; color: white; box-shadow: 0 10px 20px rgb(17 101 48 / 16%); }
@@ -596,6 +607,10 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .bracketMatchWithScore .bracketMatchMeta em { max-width: 100%; padding: 3px 6px; font-size: .64rem; }
 .bracketMatchUrgent .bracketMatchMeta em { background: #ffd75b; color: #4f3700; }
 .bracketMatchClosed .bracketMatchMeta em { background: #f0ebe2; color: #8a5b12; }
+.bracketMatchMeta .bracketFinishedStatus { display: flex; grid-column: 1 / -1; flex-wrap: wrap; gap: 5px; align-items: center; width: fit-content; max-width: 100%; background: #f1fff5; color: #0c5d2e; }
+.bracketResultInfoIcon { display: inline-grid; place-items: center; width: 17px; height: 17px; min-height: 17px; padding: 0; border-radius: 999px; background: #116530; color: white; font-family: Georgia, serif; font-size: .76rem; font-style: italic; line-height: 1; }
+.bracketMatchWithScore .bracketResultInfoIcon { width: 15px; height: 15px; min-height: 15px; font-size: .68rem; }
+.bracketFinishedStatus span { color: #0c5d2e; }
 .bracketRoundLeft .bracketMatch::after, .bracketRoundRight .bracketMatch::after { content: ""; position: absolute; top: 50%; width: 18px; border-top: 3px solid #069447; }
 .bracketRoundLeft .bracketMatch::after { right: -18px; }
 .bracketRoundRight .bracketMatch::after { left: -18px; }
@@ -716,6 +731,8 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
   .knockoutIntro { align-items: flex-start; flex-direction: column; padding: 22px; }
   .knockoutDeadlineBanner { flex-direction: column; margin-inline: 12px; }
   .knockoutDeadlineList { justify-content: flex-start; }
+  .knockoutInvalidatedBanner { flex-direction: column; margin-inline: 12px; }
+  .knockoutInvalidatedList { justify-content: flex-start; }
   .knockoutPhaseTabs { padding: 12px 16px; }
   .knockoutFocus { align-items: flex-start; flex-direction: column; padding: 14px 16px; }
   .knockoutTree { --bracket-row-height: 188px; grid-template-columns: minmax(620px, 1fr) 190px minmax(620px, 1fr); min-height: calc((var(--bracket-row-height) * 8) + (var(--bracket-row-gap) * 7) + 50px); padding: 18px; }

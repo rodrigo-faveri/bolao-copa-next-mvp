@@ -3,9 +3,14 @@ import { getTeamDisplayName, namesLookRelated, normalizeTeamName } from "./teams
 export type SerpApiMatchResult = {
   goalsA: number;
   goalsB: number;
+  penaltyGoalsA?: number | null;
+  penaltyGoalsB?: number | null;
+  resultMethod?: string | null;
   winnerTeam: string | null;
   events: Array<{ minute: string; title: string; description: string }>;
   sourceStatus: string;
+  verificationSources: Array<{ label: string; url?: string }>;
+  verificationStatus: "secondary_confirmed" | "organic_only" | "unverified";
   query: string;
 };
 
@@ -31,6 +36,7 @@ type SerpApiSportsGame = {
 
 type SerpApiSportsResponse = {
   organic_results?: Array<{
+    link?: string;
     snippet?: string;
     title?: string;
   }>;
@@ -147,6 +153,28 @@ function parsePenaltyScoreFromText(text: string, teamA: string, teamB: string) {
     : { goalsA: secondGoals, goalsB: firstGoals, winnerTeam };
 }
 
+function parseScoreFromText(text: string, teamA: string, teamB: string) {
+  const normalized = normalizeSearchText(text);
+  const teamAHit = findTeamAliasIndex(normalized, teamAliases(teamA));
+  const teamBHit = findTeamAliasIndex(normalized, teamAliases(teamB));
+  if (!teamAHit || !teamBHit) return null;
+
+  const firstTeam = teamAHit.index < teamBHit.index ? teamA : teamB;
+  const firstHit = teamAHit.index < teamBHit.index ? teamAHit : teamBHit;
+  const secondHit = firstHit === teamAHit ? teamBHit : teamAHit;
+  const firstTeamIsA = firstTeam === teamA;
+  const searchStart = firstHit.index;
+  const searchEnd = secondHit.index + secondHit.alias.length;
+  const windowText = normalized.slice(searchStart, searchEnd);
+  const numbers = (windowText.match(/\d+/g) ?? []).map(Number);
+  if (numbers.length < 2) return null;
+
+  const [firstGoals, secondGoals] = numbers.slice(-2);
+  return firstTeamIsA
+    ? { goalsA: firstGoals, goalsB: secondGoals }
+    : { goalsA: secondGoals, goalsB: firstGoals };
+}
+
 function inferOrganicResult(payload: SerpApiSportsResponse, teamA: string, teamB: string) {
   for (const item of payload.organic_results ?? []) {
     const text = `${item.title ?? ""} ${item.snippet ?? ""}`;
@@ -155,6 +183,38 @@ function inferOrganicResult(payload: SerpApiSportsResponse, teamA: string, teamB
   }
 
   return null;
+}
+
+function findOrganicVerificationSources({
+  goalsA,
+  goalsB,
+  payload,
+  teamA,
+  teamB,
+  winnerTeam,
+}: {
+  goalsA: number;
+  goalsB: number;
+  payload: SerpApiSportsResponse;
+  teamA: string;
+  teamB: string;
+  winnerTeam: string | null;
+}) {
+  return (payload.organic_results ?? [])
+    .flatMap((item) => {
+      const text = `${item.title ?? ""} ${item.snippet ?? ""}`;
+      const score = parseScoreFromText(text, teamA, teamB) ?? parsePenaltyScoreFromText(text, teamA, teamB);
+      const winner = inferWinnerByVictoryPhrase(text, teamA, teamB);
+      const confirmsScore = score?.goalsA === goalsA && score?.goalsB === goalsB;
+      const confirmsWinner = winnerTeam !== null && winner === winnerTeam;
+      if (!confirmsScore && !confirmsWinner) return [];
+
+      return [{
+        label: item.title ?? "Resultado organico",
+        url: item.link,
+      }];
+    })
+    .slice(0, 3);
 }
 
 function inferOrganicWinner(payload: SerpApiSportsResponse, teamA: string, teamB: string) {
@@ -278,7 +338,19 @@ export async function fetchSerpApiMatchResult({
     return {
       ...organicResult,
       events: [],
+      penaltyGoalsA: null,
+      penaltyGoalsB: null,
+      resultMethod: organicResult.goalsA === organicResult.goalsB && organicResult.winnerTeam ? "penalties" : null,
       sourceStatus: "organic_penalties",
+      verificationSources: findOrganicVerificationSources({
+        goalsA: organicResult.goalsA,
+        goalsB: organicResult.goalsB,
+        payload,
+        teamA,
+        teamB,
+        winnerTeam: organicResult.winnerTeam,
+      }),
+      verificationStatus: "organic_only",
       query,
     };
   }
@@ -302,13 +374,27 @@ export async function fetchSerpApiMatchResult({
       : firstPenaltyScore > secondPenaltyScore ? teamB : teamA)
     : null;
   const organicWinner = goalsA === goalsB && !penaltiesWinner ? inferOrganicWinner(payload, teamA, teamB) : null;
+  const winnerTeam = goalsA > goalsB ? teamA : goalsB > goalsA ? teamB : penaltiesWinner ?? organicWinner;
+  const verificationSources = findOrganicVerificationSources({
+    goalsA,
+    goalsB,
+    payload,
+    teamA,
+    teamB,
+    winnerTeam,
+  });
 
   return {
     goalsA,
     goalsB,
-    winnerTeam: goalsA > goalsB ? teamA : goalsB > goalsA ? teamB : penaltiesWinner ?? organicWinner,
+    penaltyGoalsA: goalsA === goalsB ? (isDirectOrder ? firstPenaltyScore : secondPenaltyScore) : null,
+    penaltyGoalsB: goalsA === goalsB ? (isDirectOrder ? secondPenaltyScore : firstPenaltyScore) : null,
+    resultMethod: penaltiesWinner ? "penalties" : goalsA === goalsB && winnerTeam ? "extra_time" : null,
+    winnerTeam,
     events: buildEvents(teams),
-    sourceStatus: game.status ?? "FT",
+    sourceStatus: `${game.status ?? "FT"}${verificationSources.length > 0 ? "+secondary_confirmed" : "+unverified"}`,
+    verificationSources,
+    verificationStatus: verificationSources.length > 0 ? "secondary_confirmed" : "unverified",
     query,
   };
 }

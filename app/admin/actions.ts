@@ -6,6 +6,7 @@ import { auth } from "../../auth";
 import { isAdminEmail } from "../../lib/access-control";
 import { createAuditLog } from "../../lib/audit";
 import { materializeKnockoutMatches } from "../../lib/knockout-materialization";
+import { pruneInvalidKnockoutPredictions } from "../../lib/knockout-prediction-cleanup";
 import { logger } from "../../lib/logger";
 import { MAX_GOALS } from "../../lib/prediction";
 import { prisma } from "../../lib/prisma";
@@ -17,6 +18,12 @@ const ResultSchema = z.object({
   matchId: z.string().cuid(),
   goalsA: z.coerce.number().int().min(0).max(MAX_GOALS),
   goalsB: z.coerce.number().int().min(0).max(MAX_GOALS),
+  penaltyGoalsA: z.preprocess((value) => value === "" || value === null ? null : value, z.coerce.number().int().min(0).max(30).nullable()),
+  penaltyGoalsB: z.preprocess((value) => value === "" || value === null ? null : value, z.coerce.number().int().min(0).max(30).nullable()),
+  resultMethod: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? null : value),
+    z.enum(["regular", "extra_time", "penalties"]).nullable(),
+  ),
   winnerTeam: z.preprocess(
     (value) => (typeof value === "string" && value.trim() === "" ? null : value),
     z.string().trim().max(80).nullable(),
@@ -78,6 +85,9 @@ export async function saveMatchResult(formData: FormData) {
     matchId: formData.get("matchId"),
     goalsA: formData.get("goalsA"),
     goalsB: formData.get("goalsB"),
+    penaltyGoalsA: formData.get("penaltyGoalsA"),
+    penaltyGoalsB: formData.get("penaltyGoalsB"),
+    resultMethod: formData.get("resultMethod"),
     winnerTeam: formData.get("winnerTeam"),
   });
 
@@ -86,7 +96,7 @@ export async function saveMatchResult(formData: FormData) {
   await prisma.$transaction(async (transaction) => {
     const previousResult = await transaction.match.findUnique({
       where: { id: result.data.matchId },
-      select: { resultGoalsA: true, resultGoalsB: true, finishedAt: true, winnerTeam: true },
+      select: { penaltyGoalsA: true, penaltyGoalsB: true, resultGoalsA: true, resultGoalsB: true, resultMethod: true, finishedAt: true, winnerTeam: true },
     });
 
     await setMatchResult(transaction, result.data);
@@ -99,20 +109,31 @@ export async function saveMatchResult(formData: FormData) {
         previousGoalsA: previousResult?.resultGoalsA ?? null,
         previousGoalsB: previousResult?.resultGoalsB ?? null,
         previousFinishedAt: previousResult?.finishedAt?.toISOString() ?? null,
+        previousPenaltyGoalsA: previousResult?.penaltyGoalsA ?? null,
+        previousPenaltyGoalsB: previousResult?.penaltyGoalsB ?? null,
+        previousResultMethod: previousResult?.resultMethod ?? null,
         previousWinnerTeam: previousResult?.winnerTeam ?? null,
         goalsA: result.data.goalsA,
         goalsB: result.data.goalsB,
+        penaltyGoalsA: result.data.penaltyGoalsA,
+        penaltyGoalsB: result.data.penaltyGoalsB,
+        resultMethod: result.data.resultMethod,
         winnerTeam: result.data.winnerTeam,
       },
     });
   });
 
   await materializeKnockoutMatches(prisma);
+  const prunedPredictions = await pruneInvalidKnockoutPredictions(prisma);
+  if (prunedPredictions.deleted > 0) {
+    logger.info("invalid_knockout_predictions_pruned_after_admin_result", { count: prunedPredictions.deleted });
+  }
 
   logger.info("admin_result_saved", {
     matchId: result.data.matchId,
     goalsA: result.data.goalsA,
     goalsB: result.data.goalsB,
+    resultMethod: result.data.resultMethod ?? null,
     winnerTeam: result.data.winnerTeam ?? null,
   });
 

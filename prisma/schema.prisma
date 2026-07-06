@@ -117,6 +117,9 @@ model Match {
   externalFixtureId  Int?
   resultGoalsA       Int?
   resultGoalsB       Int?
+  resultMethod       String?
+  penaltyGoalsA      Int?
+  penaltyGoalsB      Int?
   winnerTeam         String?
   finishedAt         DateTime?
   predictions        Prediction[]
@@ -128,6 +131,7 @@ model Match {
   @@index([startsAt])
   @@index([status])
   @@index([externalFixtureId])
+  @@index([resultMethod])
   @@index([winnerTeam])
 }
 

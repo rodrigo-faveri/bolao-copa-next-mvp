@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { createAuditLog } from "./audit";
 import { materializeKnockoutMatches } from "./knockout-materialization";
+import { pruneInvalidKnockoutPredictions } from "./knockout-prediction-cleanup";
 import { logger } from "./logger";
 import { setMatchResult } from "./results";
 import { reconcileSerpApiCalendar } from "./serpapi-calendar";
@@ -54,6 +55,7 @@ export async function syncPendingSerpApiResults({
   }
 
   const cutoff = new Date(Date.now() - delayMinutes * 60 * 1000);
+  const requireSecondaryConfirmation = process.env.SERPAPI_REQUIRE_SECONDARY_CONFIRMATION === "true";
   const materializedKnockoutMatches = dryRun ? 0 : await materializeKnockoutMatches(prisma);
   if (materializedKnockoutMatches > 0) {
     logger.info("knockout_matches_materialized", { count: materializedKnockoutMatches });
@@ -99,8 +101,19 @@ export async function syncPendingSerpApiResults({
           continue;
         }
 
+        if (requireSecondaryConfirmation && result.verificationStatus === "unverified") {
+          skipped += 1;
+          logger.warn("serpapi_result_secondary_confirmation_missing", {
+            matchId: match.id,
+            query: result.query,
+            sourceStatus: result.sourceStatus,
+          });
+          console.info(`Sem segunda fonte confirmando: ${match.teamA} x ${match.teamB}`);
+          continue;
+        }
+
         if (dryRun) {
-          console.info(`[dry-run] ${match.teamA} ${result.goalsA} x ${result.goalsB} ${match.teamB}`);
+          console.info(`[dry-run] ${match.teamA} ${result.goalsA} x ${result.goalsB} ${match.teamB} (${result.verificationStatus})`);
           imported += 1;
           continue;
         }
@@ -109,6 +122,9 @@ export async function syncPendingSerpApiResults({
           const saved = await setMatchResult(transaction, {
             allowFutureResult: true,
             matchId: match.id,
+            penaltyGoalsA: result.penaltyGoalsA ?? null,
+            penaltyGoalsB: result.penaltyGoalsB ?? null,
+            resultMethod: result.resultMethod ?? null,
             goalsA: result.goalsA,
             goalsB: result.goalsB,
             winnerTeam: result.winnerTeam,
@@ -122,9 +138,14 @@ export async function syncPendingSerpApiResults({
             metadata: {
               goalsA: result.goalsA,
               goalsB: result.goalsB,
+              penaltyGoalsA: result.penaltyGoalsA ?? null,
+              penaltyGoalsB: result.penaltyGoalsB ?? null,
+              resultMethod: result.resultMethod ?? null,
               winnerTeam: result.winnerTeam,
               query: result.query,
               sourceStatus: result.sourceStatus,
+              verificationSources: result.verificationSources,
+              verificationStatus: result.verificationStatus,
             },
           });
 
@@ -149,6 +170,7 @@ export async function syncPendingSerpApiResults({
           matchId: match.id,
           predictionsUpdated: update.predictionsUpdated,
           triggeredBy: triggeredBy ? "admin" : "job",
+          verificationStatus: result.verificationStatus,
         });
         console.info(`${match.teamA} ${result.goalsA} x ${result.goalsB} ${match.teamB} importado.`);
       } catch (error) {
@@ -176,6 +198,10 @@ export async function syncPendingSerpApiResults({
       const materializedAfterImport = await materializeKnockoutMatches(prisma);
       if (materializedAfterImport > 0) {
         logger.info("knockout_matches_materialized_after_result_sync", { count: materializedAfterImport });
+      }
+      const prunedPredictions = await pruneInvalidKnockoutPredictions(prisma);
+      if (prunedPredictions.deleted > 0) {
+        logger.info("invalid_knockout_predictions_pruned_after_result_sync", { count: prunedPredictions.deleted });
       }
     }
 

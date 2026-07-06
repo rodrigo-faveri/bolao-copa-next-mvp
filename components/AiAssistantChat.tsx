@@ -42,6 +42,9 @@ export function AiAssistantChat({ locale = "pt-BR", variant = "page" }: { locale
     setQuestion("");
     setIsLoading(true);
     setMessages((current) => [...current, { role: "user", content: trimmedQuestion }]);
+    if (variant === "widget") {
+      setIsOpen(false);
+    }
 
     try {
       const response = await fetch("/api/ai/assistant", {
@@ -211,8 +214,9 @@ export function AiAssistantChat({ locale = "pt-BR", variant = "page" }: { locale
       {isOpen && chat}
       <button
         aria-expanded={isOpen}
+        aria-busy={isLoading}
         aria-label={copy.assistant.open}
-        className="assistantWidgetButton"
+        className={`assistantWidgetButton ${isLoading ? "assistantWidgetButtonLoading" : ""}`}
         onClick={() => setIsOpen((current) => !current)}
         type="button"
       >
@@ -224,6 +228,7 @@ export function AiAssistantChat({ locale = "pt-BR", variant = "page" }: { locale
           </span>
           <span className="assistantRobotMouth" />
         </span>
+        {isLoading && <span className="srOnly">{copy.assistant.thinking}</span>}
       </button>
     </div>
   );
