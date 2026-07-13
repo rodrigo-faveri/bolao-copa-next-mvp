@@ -14,6 +14,7 @@ const avatarColors = ["#116530", "#0f766e", "#1d4ed8", "#7a4d00", "#9a3412", "#6
 type PredictionWithMatch = Awaited<ReturnType<typeof getUserProfileData>>["predictions"][number];
 type NotificationLogWithMatch = Awaited<ReturnType<typeof getUserProfileData>>["pushNotificationLogs"][number];
 type UserMatchAlertWithMatch = Awaited<ReturnType<typeof getUserProfileData>>["matchAlerts"][number];
+type ProfileCopy = ReturnType<typeof t>["profile"];
 
 async function getUserProfileData(email: string) {
   const user = await prisma.user.findUnique({
@@ -130,8 +131,95 @@ function buildProfileStats(predictions: PredictionWithMatch[], roundHistory: Ret
     exactHits,
     outcomeHits,
     pendingPredictions,
+    resolvedPredictions: resolvedPredictions.length,
+    scoringHits,
     bestRound,
   };
+}
+
+function buildAssistantRecommendations({
+  copy,
+  predictions,
+  roundHistory,
+  stats,
+}: {
+  copy: ProfileCopy;
+  predictions: PredictionWithMatch[];
+  roundHistory: ReturnType<typeof buildRoundHistory>;
+  stats: ReturnType<typeof buildProfileStats>;
+}) {
+  const recommendations: Array<{ actionHref: string; actionLabel: string; body: string; metric: string; title: string }> = [];
+  const pendingRate = predictions.length > 0 ? Math.round((stats.pendingPredictions / predictions.length) * 100) : 0;
+  const exactRate = stats.resolvedPredictions > 0 ? Math.round((stats.exactHits / stats.resolvedPredictions) * 100) : 0;
+  const outcomeRate = stats.resolvedPredictions > 0 ? Math.round((stats.outcomeHits / stats.resolvedPredictions) * 100) : 0;
+  const misses = Math.max(0, stats.resolvedPredictions - stats.scoringHits);
+  const recentRounds = [...roundHistory].filter((round) => round.resolved > 0).slice(-2);
+  const recentPoints = recentRounds.reduce((sum, round) => sum + round.points, 0);
+  const recentPredictions = recentRounds.reduce((sum, round) => sum + round.resolved, 0);
+  const recentAverage = recentPredictions > 0 ? recentPoints / recentPredictions : 0;
+
+  if (predictions.length === 0) {
+    recommendations.push({
+      actionHref: "/bolao",
+      actionLabel: copy.recommendationActionPick,
+      body: copy.recommendationNoDataText,
+      metric: copy.recommendationNoDataMetric,
+      title: copy.recommendationNoDataTitle,
+    });
+    return recommendations;
+  }
+
+  if (stats.pendingPredictions > 0) {
+    recommendations.push({
+      actionHref: "/bolao",
+      actionLabel: copy.recommendationActionPending,
+      body: formatMessage(copy.recommendationPendingText, { count: stats.pendingPredictions, rate: pendingRate }),
+      metric: `${stats.pendingPredictions}`,
+      title: copy.recommendationPendingTitle,
+    });
+  }
+
+  if (stats.resolvedPredictions >= 3 && exactRate < 18 && outcomeRate >= 25) {
+    recommendations.push({
+      actionHref: "/resultados?resultado=outcome",
+      actionLabel: copy.recommendationActionResults,
+      body: formatMessage(copy.recommendationExactText, { exactRate, outcomeRate }),
+      metric: `${exactRate}%`,
+      title: copy.recommendationExactTitle,
+    });
+  }
+
+  if (stats.resolvedPredictions >= 3 && misses >= Math.ceil(stats.resolvedPredictions / 2)) {
+    recommendations.push({
+      actionHref: "/noticias",
+      actionLabel: copy.recommendationActionNews,
+      body: formatMessage(copy.recommendationRiskText, { misses, resolved: stats.resolvedPredictions }),
+      metric: `${misses}/${stats.resolvedPredictions}`,
+      title: copy.recommendationRiskTitle,
+    });
+  }
+
+  if (recentPredictions >= 2 && recentAverage >= 3) {
+    recommendations.push({
+      actionHref: "/ranking",
+      actionLabel: copy.recommendationActionRanking,
+      body: formatMessage(copy.recommendationMomentumText, { average: recentAverage.toFixed(1) }),
+      metric: `${recentAverage.toFixed(1)} pts`,
+      title: copy.recommendationMomentumTitle,
+    });
+  }
+
+  if (recommendations.length === 0) {
+    recommendations.push({
+      actionHref: "/simulador",
+      actionLabel: copy.recommendationActionSimulator,
+      body: copy.recommendationBalancedText,
+      metric: `${stats.accuracy}%`,
+      title: copy.recommendationBalancedTitle,
+    });
+  }
+
+  return recommendations.slice(0, 3);
 }
 
 function notificationFallbackTitle(kind: string, copy: ReturnType<typeof t>["profile"]) {
@@ -163,6 +251,12 @@ export default async function PerfilPage() {
   const totalPoints = user.predictions.reduce((sum, prediction) => sum + prediction.points, 0);
   const roundHistory = buildRoundHistory(user.predictions);
   const stats = buildProfileStats(user.predictions, roundHistory);
+  const assistantRecommendations = buildAssistantRecommendations({
+    copy: copy.profile,
+    predictions: user.predictions,
+    roundHistory,
+    stats,
+  });
   const notificationDateFormatter = new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" });
 
   return (
@@ -221,6 +315,24 @@ export default async function PerfilPage() {
             </fieldset>
             <button type="submit">{copy.profile.save}</button>
           </form>
+        </article>
+
+        <article className="profileCard profileAssistantRecommendations">
+          <span className="badge badgeGold">{copy.profile.assistantRecommendations}</span>
+          <h2>{copy.profile.assistantRecommendationsTitle}</h2>
+          <p className="muted">{copy.profile.assistantRecommendationsDescription}</p>
+          <div className="assistantRecommendationList">
+            {assistantRecommendations.map((recommendation) => (
+              <article className="assistantRecommendationItem" key={recommendation.title}>
+                <div>
+                  <span>{recommendation.metric}</span>
+                  <strong>{recommendation.title}</strong>
+                  <p>{recommendation.body}</p>
+                </div>
+                <a className="buttonLink buttonSecondary" href={recommendation.actionHref}>{recommendation.actionLabel}</a>
+              </article>
+            ))}
+          </div>
         </article>
 
         <article className="profileCard">

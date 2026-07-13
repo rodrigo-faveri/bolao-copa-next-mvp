@@ -153,6 +153,7 @@ async function runAdminResultSync() {
   const summary = await syncPendingSerpApiResults({
     debug: process.env.SERPAPI_DEBUG === "true",
     delayMinutes: readPositiveInt("SERPAPI_RESULT_DELAY_MINUTES", 120),
+    force: true,
     maxMatches: readPositiveInt("SERPAPI_RESULT_MAX_MATCHES", 12),
     prisma,
     triggeredBy: adminEmail,

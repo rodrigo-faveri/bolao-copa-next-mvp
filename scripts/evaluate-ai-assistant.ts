@@ -27,6 +27,11 @@ function shouldPersist() {
   return process.argv.includes("--persist") || process.env.AI_EVALUATION_PERSIST === "true";
 }
 
+function readPositiveNumber(name: string, fallback: number) {
+  const parsed = Number(process.env[name]);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 function gitValue(args: string[]) {
   try {
     return execFileSync("git", args, {
@@ -151,6 +156,19 @@ async function main() {
 
   if (shouldPersist()) {
     const caseById = new Map(cases.map((testCase) => [testCase.id, testCase]));
+    const previousRun = await prisma.aiEvaluationRun.findFirst({
+      orderBy: { createdAt: "desc" },
+      select: { averageScore: true, id: true },
+    });
+    const previousAverageScore = previousRun?.averageScore ?? null;
+    const scoreDelta = previousAverageScore === null ? null : average - previousAverageScore;
+    const alertThreshold = readPositiveNumber("AI_EVALUATION_ALERT_DROP_POINTS", 8);
+    const qualityAlert = scoreDelta !== null && previousAverageScore !== null && scoreDelta <= -alertThreshold
+      ? `Queda de ${Math.abs(scoreDelta).toFixed(1)} ponto(s) contra a avaliacao anterior (${previousAverageScore.toFixed(1)} -> ${average.toFixed(1)}).`
+      : failed.length > 0
+        ? `${failed.length} caso(s) abaixo do minimo nesta avaliacao.`
+        : null;
+
     const run = await prisma.aiEvaluationRun.create({
       data: {
         averageScore: average,
@@ -159,6 +177,9 @@ async function main() {
         gitBranch: gitValue(["rev-parse", "--abbrev-ref", "HEAD"]),
         gitCommit: gitValue(["rev-parse", "--short", "HEAD"]),
         passedCases: passed,
+        previousAverageScore,
+        qualityAlert,
+        scoreDelta,
         totalCases: results.length,
         webSearchEnabled: process.env.AI_WEB_SEARCH_ENABLED === "true",
         caseResults: {
@@ -180,6 +201,7 @@ async function main() {
     });
 
     console.info(`Historico salvo no banco: ${run.id}`);
+    if (qualityAlert) console.warn(`ALERTA IA: ${qualityAlert}`);
   }
 
   if (failed.length > 0) {

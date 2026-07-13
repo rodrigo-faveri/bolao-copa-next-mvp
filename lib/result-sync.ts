@@ -4,6 +4,7 @@ import { materializeKnockoutMatches } from "./knockout-materialization";
 import { pruneInvalidKnockoutPredictions } from "./knockout-prediction-cleanup";
 import { logger } from "./logger";
 import { setMatchResult } from "./results";
+import { getPendingResultSyncQueue, recordResultSyncAttempt } from "./result-sync-queue";
 import { reconcileSerpApiCalendar } from "./serpapi-calendar";
 import { fetchSerpApiMatchDebug, fetchSerpApiMatchResult } from "./serpapi-results";
 
@@ -23,6 +24,7 @@ export async function syncPendingSerpApiResults({
   debug = false,
   delayMinutes = readPositiveInt("SERPAPI_RESULT_DELAY_MINUTES", 120),
   dryRun = false,
+  force = false,
   maxMatches = readPositiveInt("SERPAPI_RESULT_MAX_MATCHES", 12),
   prisma,
   triggeredBy,
@@ -30,6 +32,7 @@ export async function syncPendingSerpApiResults({
   debug?: boolean;
   delayMinutes?: number;
   dryRun?: boolean;
+  force?: boolean;
   maxMatches?: number;
   prisma: PrismaClient;
   triggeredBy?: string | null;
@@ -54,7 +57,6 @@ export async function syncPendingSerpApiResults({
     throw new Error(errorMessage);
   }
 
-  const cutoff = new Date(Date.now() - delayMinutes * 60 * 1000);
   const requireSecondaryConfirmation = process.env.SERPAPI_REQUIRE_SECONDARY_CONFIRMATION === "true";
   const materializedKnockoutMatches = dryRun ? 0 : await materializeKnockoutMatches(prisma);
   if (materializedKnockoutMatches > 0) {
@@ -65,15 +67,15 @@ export async function syncPendingSerpApiResults({
     logger.info("serpapi_calendar_reconciled", calendarReconciliation);
   }
 
-  const matches = await prisma.match.findMany({
-    where: {
-      startsAt: { lte: cutoff },
-      resultGoalsA: null,
-      resultGoalsB: null,
-    },
-    orderBy: { startsAt: "asc" },
-    take: maxMatches,
-  });
+  const now = new Date();
+  const manualMinElapsedMinutes = readPositiveInt("SERPAPI_FORCE_MIN_ELAPSED_MINUTES", Math.max(90, delayMinutes - 20));
+  const queue = await getPendingResultSyncQueue(prisma, now);
+  const matches = queue
+    .filter((item) => force
+      ? item.elapsedMinutes >= manualMinElapsedMinutes
+      : item.status === "due" || item.status === "stale")
+    .slice(0, maxMatches)
+    .map((item) => item.match);
 
   let imported = 0;
   let skipped = 0;
@@ -89,6 +91,14 @@ export async function syncPendingSerpApiResults({
 
         if (!result) {
           skipped += 1;
+          if (!dryRun) {
+            await recordResultSyncAttempt(prisma, {
+              matchId: match.id,
+              reason: "no_reliable_final_result",
+              runId: syncRun.id,
+              status: "skipped",
+            });
+          }
           console.info(`Sem resultado final confiavel: ${match.teamA} x ${match.teamB}`);
           if (debug) {
             const debugResult = await fetchSerpApiMatchDebug({
@@ -103,6 +113,20 @@ export async function syncPendingSerpApiResults({
 
         if (requireSecondaryConfirmation && result.verificationStatus === "unverified") {
           skipped += 1;
+          if (!dryRun) {
+            await recordResultSyncAttempt(prisma, {
+              matchId: match.id,
+              metadata: {
+                query: result.query,
+                verificationSources: result.verificationSources,
+                verificationStatus: result.verificationStatus,
+              },
+              reason: "secondary_confirmation_missing",
+              runId: syncRun.id,
+              sourceStatus: result.sourceStatus,
+              status: "skipped",
+            });
+          }
           logger.warn("serpapi_result_secondary_confirmation_missing", {
             matchId: match.id,
             query: result.query,
@@ -160,6 +184,25 @@ export async function syncPendingSerpApiResults({
             });
           }
 
+          await recordResultSyncAttempt(transaction, {
+            matchId: match.id,
+            metadata: {
+              goalsA: result.goalsA,
+              goalsB: result.goalsB,
+              penaltyGoalsA: result.penaltyGoalsA ?? null,
+              penaltyGoalsB: result.penaltyGoalsB ?? null,
+              query: result.query,
+              resultMethod: result.resultMethod ?? null,
+              verificationSources: result.verificationSources,
+              verificationStatus: result.verificationStatus,
+              winnerTeam: result.winnerTeam,
+            },
+            reason: "result_imported",
+            runId: syncRun.id,
+            sourceStatus: result.sourceStatus,
+            status: "imported",
+          });
+
           return saved;
         });
 
@@ -175,6 +218,17 @@ export async function syncPendingSerpApiResults({
         console.info(`${match.teamA} ${result.goalsA} x ${result.goalsB} ${match.teamB} importado.`);
       } catch (error) {
         skipped += 1;
+        if (!dryRun) {
+          await recordResultSyncAttempt(prisma, {
+            matchId: match.id,
+            reason: error instanceof Error ? error.message.slice(0, 240) : "unknown",
+            runId: syncRun.id,
+            status: "failed",
+          }).catch((attemptError) => logger.error("result_sync_attempt_write_failed", {
+            matchId: match.id,
+            message: attemptError instanceof Error ? attemptError.message : "unknown",
+          }));
+        }
         logger.warn("serpapi_result_import_failed", {
           matchId: match.id,
           message: error instanceof Error ? error.message : "unknown",
