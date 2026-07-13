@@ -53,11 +53,14 @@ App recreativo para palpites da Copa do Mundo de 2026 entre amigos, sem dinheiro
 - Assistente IA com acoes agenticas para abrir/focar confrontos citados pelo usuario, preencher sugestoes de palpite sem salvar automaticamente, montar plano de alerta e explicar cenarios de classificacao.
 - Assistente IA busca noticias especificas das selecoes citadas, combinando noticias gerais da Copa com contexto direcionado por time.
 - Assistente IA pode acionar busca web controlada via SerpAPI quando o RAG local nao encontra contexto suficiente, limitada a futebol/Copa e dominios permitidos.
+- Assistente IA transforma historico real do usuario em recomendacoes acionaveis no widget, com atalhos para palpites, resultados, noticias, ranking ou simulador.
+- Assistente IA possui modo "coach da rodada", combinando historico pessoal, ranking e pendencias em um plano pratico antes da rodada.
 - Planos de alerta sugeridos pela IA podem ser persistidos por usuario e aparecem no perfil.
 - Alertas personalizados criados pela IA podem ser editados, desativados ou removidos no perfil.
 - RAG com embeddings reais opcionais na tabela `KnowledgeDocument`, com fallback para busca textual.
 - Tela admin de auditoria do RAG para comparar busca textual, busca semantica e fontes usadas pela IA.
 - Avaliacao automatizada da assistente com perguntas de referencia e nota de qualidade do contexto recuperado.
+- Painel no perfil com recomendacoes da assistente baseadas no historico real de acertos, erros e palpites pendentes do usuario.
 - Auditoria em banco para eventos sensiveis.
 - Headers de seguranca no Next.js.
 - Rate limit para salvar palpites e consultar IA.
@@ -149,6 +152,10 @@ EMBEDDINGS_MODEL="text-embedding-3-small"
 SERPAPI_KEY=""
 SERPAPI_RESULT_DELAY_MINUTES="120"
 SERPAPI_RESULT_MAX_MATCHES="12"
+RESULT_SYNC_RETRY_MINUTES="120,180,300,480"
+RESULT_SYNC_MIN_RETRY_SPACING_MINUTES="45"
+RESULT_SYNC_STALE_RETRY_MINUTES="360"
+SERPAPI_FORCE_MIN_ELAPSED_MINUTES="100"
 SERPAPI_DRY_RUN="false"
 SERPAPI_DEBUG="false"
 SERPAPI_CALENDAR_RECONCILE="true"
@@ -194,6 +201,10 @@ Notas:
 - `AI_WEB_SEARCH_ALLOWED_DOMAINS` limita as fontes externas permitidas. Use apenas dominios confiaveis e relacionados a futebol/Copa.
 - `AI_WEB_SEARCH_MAX_RESULTS` e `AI_WEB_SEARCH_CACHE_MINUTES` controlam custo e repeticao das buscas externas.
 - `SERPAPI_CALENDAR_RECONCILE="true"` tenta validar horarios dos jogos pendentes com SerpAPI antes de buscar placares.
+- `RESULT_SYNC_RETRY_MINUTES` define a fila progressiva de tentativas pos-jogo, em minutos desde o inicio da partida.
+- `RESULT_SYNC_MIN_RETRY_SPACING_MINUTES` evita retentativas muito proximas para o mesmo jogo.
+- `RESULT_SYNC_STALE_RETRY_MINUTES` define a cadencia de novas tentativas para jogos ja marcados como atrasados.
+- `SERPAPI_FORCE_MIN_ELAPSED_MINUTES` define quando o botao manual do admin pode forcar nova busca.
 - `SERPAPI_REQUIRE_SECONDARY_CONFIRMATION="true"` exige que o resultado da SerpAPI tenha confirmacao em outra fonte organica da busca antes de salvar.
 - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` e `VAPID_SUBJECT` ativam Web Push real. Gere com `npx web-push generate-vapid-keys`.
 - `PUSH_REMINDER_WINDOW_MINUTES` define a janela de envio dos avisos de palpite pendente.
@@ -261,7 +272,7 @@ Tambem existe sincronizacao semi-automatica pos-jogo usando SerpAPI/Google Sport
 npm run result:sync-serpapi
 ```
 
-Ela primeiro materializa confrontos do mata-mata a partir dos resultados ja conhecidos e, quando `SERPAPI_CALENDAR_RECONCILE="true"`, tenta validar os horarios dos jogos pendentes com SerpAPI/Google Sports. Depois procura partidas que ja passaram da janela configurada por `SERPAPI_RESULT_DELAY_MINUTES`, ainda nao tem resultado oficial e tenta importar o placar final. Se a resposta nao for confiavel ou nao estiver finalizada, a partida e ignorada. Quando a fonte traz gols ou cartoes no payload estruturado, esses lances sao importados automaticamente para `MatchEvent`. O importador tambem tenta confirmar placar/vencedor em resultados organicos da busca e registra essas fontes no audit log; se `SERPAPI_REQUIRE_SECONDARY_CONFIRMATION="true"`, resultados sem segunda confirmacao sao ignorados.
+Ela primeiro materializa confrontos do mata-mata a partir dos resultados ja conhecidos e, quando `SERPAPI_CALENDAR_RECONCILE="true"`, tenta validar os horarios dos jogos pendentes com SerpAPI/Google Sports. Depois consulta a fila inteligente de resultados, que registra tentativas por partida na tabela `ResultSyncAttempt`, respeita retentativas progressivas e mostra no `/admin` se um jogo esta aguardando janela, pronto para buscar ou atrasado. Se a resposta nao for confiavel ou nao estiver finalizada, a partida e ignorada com motivo rastreavel. Quando a fonte traz gols ou cartoes no payload estruturado, esses lances sao importados automaticamente para `MatchEvent`. O importador tambem tenta confirmar placar/vencedor em resultados organicos da busca e registra essas fontes no audit log; se `SERPAPI_REQUIRE_SECONDARY_CONFIRMATION="true"`, resultados sem segunda confirmacao sao ignorados.
 
 Para testar sem salvar no banco:
 
@@ -269,7 +280,7 @@ Para testar sem salvar no banco:
 SERPAPI_DRY_RUN=true npm run result:sync-serpapi
 ```
 
-Em producao, agende esse comando em cron/job a partir das 16h de Brasilia e depois a cada 120 minutos durante a janela de jogos. O workflow `.github/workflows/sync-serpapi-results.yml` ja roda em `19:00`, `21:00`, `23:00`, `01:00` e `03:00` UTC, equivalente a `16h`, `18h`, `20h`, `22h` e `00h` em Brasilia. Use `SERPAPI_RESULT_MAX_MATCHES="12"` para cobrir varias partidas acumuladas na mesma execucao sem deixar jogos antigos presos na fila.
+Em producao, agende esse comando em cron/job a partir das 16h de Brasilia e depois a cada 120 minutos durante a janela de jogos. O workflow `.github/workflows/sync-serpapi-results.yml` ja roda em `19:00`, `21:00`, `23:00`, `01:00` e `03:00` UTC, equivalente a `16h`, `18h`, `20h`, `22h` e `00h` em Brasilia. Use `SERPAPI_RESULT_MAX_MATCHES="12"` para cobrir varias partidas acumuladas na mesma execucao sem deixar jogos antigos presos na fila. O botao `Sincronizar agora` em `/admin` forca uma tentativa para jogos elegiveis e exibe feedback visual.
 
 Variaveis relacionadas:
 
@@ -277,6 +288,10 @@ Variaveis relacionadas:
 SERPAPI_KEY=""
 SERPAPI_RESULT_DELAY_MINUTES="120"
 SERPAPI_RESULT_MAX_MATCHES="12"
+RESULT_SYNC_RETRY_MINUTES="120,180,300,480"
+RESULT_SYNC_MIN_RETRY_SPACING_MINUTES="45"
+RESULT_SYNC_STALE_RETRY_MINUTES="360"
+SERPAPI_FORCE_MIN_ELAPSED_MINUTES="100"
 SERPAPI_DRY_RUN="false"
 SERPAPI_DEBUG="false"
 SERPAPI_CALENDAR_RECONCILE="true"
@@ -446,7 +461,7 @@ Para salvar o historico no banco e comparar a qualidade por commit/branch:
 npm run ai:evaluate -- --persist
 ```
 
-Tambem e possivel usar `AI_EVALUATION_PERSIST=true`. As execucoes persistidas aparecem em `/admin/ia`, com media geral, casos aprovados/reprovados, commit, branch e status de embeddings.
+Tambem e possivel usar `AI_EVALUATION_PERSIST=true`. As execucoes persistidas aparecem em `/admin/ia`, com media geral, casos aprovados/reprovados, commit, branch, status de embeddings e comparacao contra a execucao anterior. Configure `AI_EVALUATION_ALERT_DROP_POINTS` para definir quantos pontos de queda geram alerta de qualidade; o padrao e `8`.
 
 ### Testes de integracao com PostgreSQL
 
@@ -471,4 +486,4 @@ npm run test:integration
 
 ## Proximas Evolucoes
 
-- Comparar automaticamente a ultima avaliacao da IA contra a execucao anterior e criar alerta quando houver queda relevante de qualidade.
+- Permitir salvar o plano do coach da rodada no perfil e comparar depois com a pontuacao real obtida.

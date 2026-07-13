@@ -161,6 +161,16 @@ type ScenarioPrediction = {
   matchId: string;
 };
 
+type UserPerformancePrediction = {
+  goalsA: number;
+  goalsB: number;
+  points: number;
+  match: {
+    resultGoalsA: number | null;
+    resultGoalsB: number | null;
+  };
+};
+
 function getScenarioScore(match: ScenarioMatch, predictionsByMatchId: Map<string, ScenarioPrediction>) {
   if (match.resultGoalsA !== null && match.resultGoalsB !== null) {
     return { goalsA: match.resultGoalsA, goalsB: match.resultGoalsB, source: "oficial" };
@@ -231,6 +241,132 @@ function buildScenarioStandings(matches: ScenarioMatch[], predictions: ScenarioP
       || b.goalsFor - a.goalsFor
       || getTeamDisplayName(a.team).localeCompare(getTeamDisplayName(b.team)),
     ),
+  };
+}
+
+function buildUserPerformanceInsights(predictions: UserPerformancePrediction[]) {
+  const resolved = predictions.filter((prediction) => prediction.match.resultGoalsA !== null && prediction.match.resultGoalsB !== null);
+  const exactHits = resolved.filter((prediction) => prediction.goalsA === prediction.match.resultGoalsA && prediction.goalsB === prediction.match.resultGoalsB).length;
+  const outcomeHits = resolved.filter((prediction) => prediction.points > 0 && !(prediction.goalsA === prediction.match.resultGoalsA && prediction.goalsB === prediction.match.resultGoalsB)).length;
+  const scoringHits = exactHits + outcomeHits;
+  const misses = Math.max(0, resolved.length - scoringHits);
+  const pending = predictions.length - resolved.length;
+  const accuracy = resolved.length > 0 ? Math.round((scoringHits / resolved.length) * 100) : 0;
+  const exactRate = resolved.length > 0 ? Math.round((exactHits / resolved.length) * 100) : 0;
+  const outcomeRate = resolved.length > 0 ? Math.round((outcomeHits / resolved.length) * 100) : 0;
+  const averagePoints = resolved.length > 0 ? predictions.reduce((sum, prediction) => sum + prediction.points, 0) / resolved.length : 0;
+  const recommendations: Array<{ action: AssistantAction; line: string }> = [];
+
+  if (predictions.length === 0) {
+    recommendations.push({
+      action: { href: "/bolao#bolao-confrontos", label: "Ir para palpites", type: "link" },
+      line: "Comece salvando palpites para a assistente detectar seu padrao de acertos.",
+    });
+  }
+
+  if (pending > 0) {
+    recommendations.push({
+      action: { href: "/bolao#bolao-confrontos", label: "Palpitar pendentes", type: "link" },
+      line: `Priorize ${pending} palpite(s) pendente(s); jogo em branco sempre tem retorno zero.`,
+    });
+  }
+
+  if (resolved.length >= 3 && exactRate < 18 && outcomeRate >= 25) {
+    recommendations.push({
+      action: { href: "/resultados?resultado=outcome", label: "Ver resultados certos", type: "link" },
+      line: `Voce acerta resultado em ${outcomeRate}% dos jogos resolvidos, mas placar exato em ${exactRate}%; use placares mais conservadores quando o favorito for claro.`,
+    });
+  }
+
+  if (resolved.length >= 3 && misses >= Math.ceil(resolved.length / 2)) {
+    recommendations.push({
+      action: { href: "/noticias", label: "Ler noticias", type: "link" },
+      line: `Voce ficou sem pontuar em ${misses} de ${resolved.length} jogo(s); antes de arriscar zebra, confira noticias e contexto recente.`,
+    });
+  }
+
+  if (resolved.length >= 3 && averagePoints >= 3) {
+    recommendations.push({
+      action: { href: "/ranking", label: "Ver ranking", type: "link" },
+      line: `Sua media nos jogos resolvidos esta em ${averagePoints.toFixed(1)} ponto(s); mantenha a estrategia e ajuste apenas confrontos incertos.`,
+    });
+  }
+
+  if (recommendations.length === 0) {
+    recommendations.push({
+      action: { href: "/simulador", label: "Abrir simulador", type: "link" },
+      line: "Seu historico esta equilibrado; use o simulador para testar cenarios antes de mudar a estrategia.",
+    });
+  }
+
+  return {
+    accuracy,
+    averagePoints,
+    exactRate,
+    outcomeRate,
+    pending,
+    recommendations: recommendations.slice(0, 3),
+    resolved: resolved.length,
+    total: predictions.length,
+  };
+}
+
+function buildRoundCoachPlan({
+  missingKnockoutPicks,
+  missingPicks,
+  profileInsights,
+  ranking,
+  userId,
+}: {
+  missingKnockoutPicks: Array<{ bracketMatchId: string; match: ScenarioMatch }>;
+  missingPicks: ScenarioMatch[];
+  profileInsights: ReturnType<typeof buildUserPerformanceInsights>;
+  ranking: Array<{ id: string; name: string; points: number; predictions: number }>;
+  userId: string;
+}) {
+  const userPosition = ranking.findIndex((row) => row.id === userId) + 1;
+  const userRow = ranking.find((row) => row.id === userId) ?? null;
+  const leader = ranking[0] ?? null;
+  const pointsBehindLeader = userRow && leader ? Math.max(0, leader.points - userRow.points) : null;
+  const firstGroupPick = missingPicks[0] ?? null;
+  const firstKnockoutPick = missingKnockoutPicks[0]?.match ?? null;
+  const plan: string[] = [];
+
+  if (firstGroupPick) {
+    plan.push(`1) Fechar primeiro ${getTeamDisplayName(firstGroupPick.teamA)} x ${getTeamDisplayName(firstGroupPick.teamB)} em /bolao; e o proximo jogo pendente da fase de grupos.`);
+  } else if (firstKnockoutPick) {
+    plan.push(`1) Abrir a aba Mata-mata e preencher ${getTeamDisplayName(firstKnockoutPick.teamA)} x ${getTeamDisplayName(firstKnockoutPick.teamB)}.`);
+  } else {
+    plan.push("1) Nao encontrei pendencias imediatas; revise resultados e ranking antes de mudar estrategia.");
+  }
+
+  if (profileInsights.exactRate < 18 && profileInsights.outcomeRate >= 25) {
+    plan.push("2) Usar placares conservadores em favoritos claros: voce ja acerta resultado melhor do que placar exato.");
+  } else if (profileInsights.accuracy >= 45) {
+    plan.push("2) Manter sua linha atual e arriscar apenas em 1 jogo equilibrado da rodada.");
+  } else {
+    plan.push("2) Reduzir risco: priorize 1x0, 1x1 e 2x1 em vez de placares muito abertos.");
+  }
+
+  if (pointsBehindLeader !== null && userPosition > 1) {
+    plan.push(`3) Ranking: voce esta ${pointsBehindLeader} ponto(s) atras do lider; busque consistencia antes de tentar uma virada em varios jogos.`);
+  } else if (userPosition === 1) {
+    plan.push("3) Ranking: voce esta liderando entre os dados carregados; evite palpites muito agressivos sem noticia forte.");
+  } else {
+    plan.push("3) Ranking: ainda nao ha leitura suficiente da sua posicao; foque em nao deixar palpites em branco.");
+  }
+
+  return {
+    actions: [
+      firstGroupPick ? buildFocusMatchAction(firstGroupPick) : null,
+      firstKnockoutPick ? { href: "/bolao?fase=mata-mata#bolao-confrontos", label: "Abrir mata-mata", type: "link" as const } : null,
+      { href: "/ranking", label: "Ver ranking", type: "link" as const },
+      { href: "/resultados", label: "Ver resultados", type: "link" as const },
+    ].filter((action): action is AssistantAction => Boolean(action)),
+    leader,
+    plan,
+    pointsBehindLeader,
+    userPosition,
   };
 }
 
@@ -448,6 +584,16 @@ async function buildAssistantContext(email: string, question: string, tools: str
     pickDossier,
     rankingLeader: ranking[0] ?? null,
   });
+  const profileInsights = buildUserPerformanceInsights(predictions);
+  const roundCoachPlan = uses("round_coach")
+    ? buildRoundCoachPlan({
+      missingKnockoutPicks,
+      missingPicks,
+      profileInsights,
+      ranking,
+      userId: user.id,
+    })
+    : null;
 
   const contextLines = [
     `Usuario: ${user.nickname || user.name || "participante"}.`,
@@ -476,6 +622,22 @@ async function buildAssistantContext(email: string, question: string, tools: str
     ...(uses("ranking_snapshot") ? [
       "Ranking geral parcial:",
       ...ranking.map((row, index) => `- ${index + 1}. ${row.name}: ${row.points} pts, ${row.predictions} palpites`),
+    ] : []),
+    ...(uses("profile_recommendations") ? [
+      "Recomendacoes da assistente pelo historico real do usuario:",
+      `- Resumo: ${profileInsights.total} palpite(s), ${profileInsights.resolved} resolvido(s), ${profileInsights.pending} pendente(s), aproveitamento ${profileInsights.accuracy}%, placar exato ${profileInsights.exactRate}%, resultado certo ${profileInsights.outcomeRate}%, media ${profileInsights.averagePoints.toFixed(1)} pts por jogo resolvido.`,
+      ...profileInsights.recommendations.map((recommendation) => `- ${recommendation.line}`),
+      "Instrucao: use essas recomendacoes como base principal quando a pergunta for sobre desempenho, historico ou onde melhorar.",
+    ] : []),
+    ...(uses("round_coach") ? [
+      "Coach da rodada:",
+      ...(roundCoachPlan
+        ? [
+          `- Posicao do usuario no ranking carregado: ${roundCoachPlan.userPosition || "sem posicao"}; lider: ${roundCoachPlan.leader?.name ?? "indefinido"}; distancia do lider: ${roundCoachPlan.pointsBehindLeader ?? "N/A"} ponto(s).`,
+          ...roundCoachPlan.plan.map((item) => `- ${item}`),
+          "Instrucao: responda como plano de rodada, em passos curtos, priorizando pendencias e calibragem de risco.",
+        ]
+        : ["- Nao foi possivel montar plano da rodada com os dados atuais."]),
     ] : []),
     ...(uses("relevant_news") ? [
       "Noticias relevantes:",
@@ -565,12 +727,16 @@ async function buildAssistantContext(email: string, question: string, tools: str
     hasAlertPlan: uses("custom_alerts") && missingPicks.length > 0,
     hasScenario: Boolean(scenario),
     knockoutPendingAction,
+    profileRecommendationActions: uses("profile_recommendations") ? profileInsights.recommendations.map((recommendation) => recommendation.action) : [],
+    roundCoachActions: roundCoachPlan?.actions ?? [],
     diagnostics: {
       knowledgeHits: retrievedKnowledge.length,
       mentionedTeams: mentionedTeamNames,
       newsItems: relevantNews.length,
       planSteps: agentPlan.length,
       pickDossierMatch: pickDossier ? `${pickDossier.targetMatch.teamA} x ${pickDossier.targetMatch.teamB}` : null,
+      profileRecommendationCount: uses("profile_recommendations") ? profileInsights.recommendations.length : 0,
+      roundCoachSteps: roundCoachPlan?.plan.length ?? 0,
       sourceCount: sources.length,
       webSearchItems: webSearchNews.length,
       webSearchReason,
@@ -717,6 +883,8 @@ function localAnswer(question: string, context: string) {
   const pendingGroupPicks = extractContextList(context, "Palpites pendentes do usuario na fase de grupos:");
   const pendingKnockoutPicks = extractContextList(context, "Palpites pendentes do usuario no mata-mata:");
   const agentPlan = extractContextList(context, "Plano agentico sugerido:");
+  const profileRecommendations = extractContextList(context, "Recomendacoes da assistente pelo historico real do usuario:");
+  const roundCoach = extractContextList(context, "Coach da rodada:");
 
   if (/(pendente|preciso|falta|fech)/i.test(question)) {
     const groupLines = pendingGroupPicks.filter((line) => !line.includes("Nenhum"));
@@ -734,6 +902,21 @@ function localAnswer(question: string, context: string) {
       knockoutLines.length > 0 ? `Mata-mata:\n${knockoutLines.slice(0, 6).map((line) => `- ${line}`).join("\n")}` : null,
       agentPlan.length > 0 ? `Proximo passo:\n${agentPlan.slice(0, 2).map((line) => `- ${line}`).join("\n")}` : "Abra /bolao para preencher os confrontos pendentes.",
     ].filter(Boolean).join("\n\n");
+  }
+
+  if (/(melhor|recomend|historico|hist[oó]rico|desempenho|aproveitamento|erros|perfil)/i.test(question) && profileRecommendations.length > 0) {
+    return [
+      "Nao consegui consultar o LLM agora, mas li seu historico real no app.",
+      profileRecommendations.slice(0, 4).map((line) => `- ${line}`).join("\n"),
+      "Essas sugestoes usam apenas seus palpites salvos, resultados oficiais e pendencias atuais.",
+    ].join("\n\n");
+  }
+
+  if (/(coach|plano|rodada|estrategia da rodada|antes da rodada)/i.test(question) && roundCoach.length > 0) {
+    return [
+      "Nao consegui consultar o LLM agora, mas montei um plano da rodada com seus dados internos.",
+      roundCoach.slice(0, 5).map((line) => `- ${line}`).join("\n"),
+    ].join("\n\n");
   }
 
   const missingLine = pendingGroupPicks.some((line) => !line.includes("Nenhum")) || pendingKnockoutPicks.some((line) => !line.includes("Nenhum"))
@@ -764,6 +947,8 @@ function extractContextList(context: string, heading: string) {
 function classifyIntent(question: string) {
   const normalizedQuestion = question.toLowerCase();
   if (/(alerta|aviso|avisar|lembrete|notific)/i.test(normalizedQuestion)) return "custom_alerts";
+  if (/(coach|plano da rodada|estrategia da rodada|antes da rodada|rodada)/i.test(normalizedQuestion)) return "round_coach";
+  if (/(melhor|recomend|historico|hist[oó]rico|desempenho|aproveitamento|erros|perfil|onde posso melhorar)/i.test(normalizedQuestion)) return "profile_recommendations";
   if (/(classifica|classificacao|classifica[cç][aã]o|cenario|cen[aá]rio|avanca|avan[cç]a|passa|grupo)/i.test(normalizedQuestion)) return "classification_scenarios";
   if (/(pendente|preciso|falta|fech)/i.test(normalizedQuestion)) return "pending_picks";
   if (/(ranking|posicao|lider|pontos|pontu)/i.test(normalizedQuestion)) return "ranking";
@@ -774,6 +959,8 @@ function classifyIntent(question: string) {
 
 function selectToolsForIntent(intent: string) {
   if (intent === "custom_alerts") return ["custom_alerts", "pending_picks", "upcoming_matches", "relevant_matches", "knowledge_base"];
+  if (intent === "round_coach") return ["round_coach", "profile_recommendations", "pending_picks", "upcoming_matches", "ranking_snapshot", "recent_results", "knowledge_base"];
+  if (intent === "profile_recommendations") return ["profile_recommendations", "pending_picks", "ranking_snapshot", "recent_results", "knowledge_base"];
   if (intent === "classification_scenarios") return ["classification_scenarios", "relevant_matches", "pending_picks", "upcoming_matches", "knowledge_base"];
   if (intent === "pending_picks") return ["pending_picks", "upcoming_matches", "knowledge_base"];
   if (intent === "ranking") return ["ranking_snapshot", "recent_results", "knowledge_base"];
@@ -798,6 +985,12 @@ function selectActionsForIntent(intent: string, tools: string[]) {
   }
   if (tools.includes("custom_alerts")) {
     actions.push({ href: "/perfil", label: "Configurar notificacoes", type: "link" });
+  }
+  if (tools.includes("profile_recommendations")) {
+    actions.push({ href: "/perfil", label: "Ver recomendacoes", type: "link" });
+  }
+  if (tools.includes("round_coach")) {
+    actions.push({ href: "/bolao#bolao-confrontos", label: "Abrir rodada", type: "link" });
   }
   if (tools.includes("classification_scenarios")) {
     actions.push({ href: "/simulador", label: "Abrir simulador", type: "link" });
@@ -880,7 +1073,7 @@ async function runAssistantGraph(email: string, question: string) {
       tools: selectToolsForIntent(classifyIntent(state.question)),
     }))
     .addNode("retrieve", async (state) => {
-      const { context, createAlertAction, diagnostics, focusMatchAction, hasAlertPlan, hasScenario, knockoutPendingAction, sources, suggestedPickAction } = await buildAssistantContext(state.email, state.question, state.tools);
+      const { context, createAlertAction, diagnostics, focusMatchAction, hasAlertPlan, hasScenario, knockoutPendingAction, profileRecommendationActions, roundCoachActions, sources, suggestedPickAction } = await buildAssistantContext(state.email, state.question, state.tools);
       const shouldSuggestPick = state.intent === "pick_strategy" || state.intent === "pending_picks";
       const shouldFocusMatch = state.tools.includes("relevant_matches") || state.intent === "general" || hasAlertPlan || hasScenario;
       return {
@@ -888,6 +1081,8 @@ async function runAssistantGraph(email: string, question: string) {
           shouldFocusMatch ? [focusMatchAction] : [],
           hasAlertPlan ? [createAlertAction] : [],
           state.intent === "pending_picks" ? [knockoutPendingAction] : [],
+          state.intent === "round_coach" ? roundCoachActions : [],
+          state.intent === "profile_recommendations" ? profileRecommendationActions : [],
           shouldSuggestPick ? [suggestedPickAction] : [],
           state.actions,
         ),

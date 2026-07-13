@@ -205,6 +205,14 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .profileStatsGrid strong { color: #116530; font-size: 1.35rem; line-height: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .profileStatsWide { grid-column: 1 / -1; background: linear-gradient(135deg, #fff8df 0%, #f8fbf9 100%) !important; }
 .profileStatsWide strong { color: #7a4d00; font-size: 1.05rem; }
+.profileAssistantRecommendations { grid-column: 1 / -1; background: linear-gradient(135deg, #ffffff 0%, #fff8df 52%, #eefbf2 100%); }
+.assistantRecommendationList { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.assistantRecommendationItem { display: grid; grid-template-rows: 1fr auto; gap: 14px; min-width: 0; padding: 16px; border: 1px solid rgb(17 101 48 / 16%); border-radius: 18px; background: rgb(255 255 255 / 82%); box-shadow: 0 12px 26px rgb(20 32 25 / 7%); }
+.assistantRecommendationItem div { display: grid; gap: 8px; min-width: 0; }
+.assistantRecommendationItem span { width: fit-content; padding: 6px 9px; border-radius: 999px; background: #116530; color: #ffd75b; font-size: .76rem; font-weight: 1000; }
+.assistantRecommendationItem strong { color: #102016; font-size: 1.08rem; line-height: 1.15; }
+.assistantRecommendationItem p { margin: 0; color: #48574e; font-weight: 800; line-height: 1.42; }
+.assistantRecommendationItem .buttonLink { justify-self: start; }
 .profileForm { display: grid; gap: 14px; }
 .profileForm label, .profileForm fieldset { display: grid; gap: 8px; color: #617068; font-size: .82rem; font-weight: 900; text-transform: uppercase; }
 .profileForm input[type="text"] { width: 100%; max-width: 380px; text-align: left; }
@@ -318,6 +326,8 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .resultsSummary p { margin-bottom: 0; }
 .resultsInsights { display: grid; grid-template-columns: minmax(220px, .8fr) minmax(0, 1.6fr); gap: 18px; align-items: stretch; margin-bottom: 18px; padding: 20px; }
 .resultsInsights h2 { margin: 10px 0 8px; }
+.resultsKnockoutSummary { display: grid; gap: 18px; }
+.resultsKnockoutSummary h2 { margin: 10px 0 8px; }
 .resultsInsightsGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .resultsInsightsGrid article { display: grid; gap: 8px; min-width: 0; padding: 14px; border: 1px solid #e3ece6; border-radius: 16px; background: linear-gradient(135deg, #fbfdfb 0%, #f2fff6 100%); }
 .resultsInsightsGrid span { color: #617068; font-size: .76rem; font-weight: 900; text-transform: uppercase; }
@@ -326,6 +336,10 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .resultsFilters { display: grid; grid-template-columns: minmax(160px, .8fr) minmax(190px, .9fr) auto auto; gap: 12px; align-items: end; margin-bottom: 16px; }
 .resultsFilters label { display: grid; gap: 7px; color: #617068; font-size: .82rem; font-weight: 900; text-transform: uppercase; }
 .resultsFilters select { width: 100%; }
+.resultsPhaseSections { display: grid; gap: 22px; }
+.resultsPhaseSection { display: grid; gap: 12px; }
+.resultsPhaseHeader { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 0 4px; }
+.resultsPhaseHeader strong { color: #617068; font-size: .9rem; }
 .resultsList { display: grid; gap: 14px; }
 .resultCard { display: grid; gap: 16px; padding: 18px; }
 .resultCardPending { border-color: rgb(22 163 74 / 22%); background: linear-gradient(135deg, #ffffff 0%, #f3fff6 100%); }
@@ -335,6 +349,7 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .resultPoints { padding: 10px 12px; border-radius: 14px; background: #fff2bd; color: #7a4d00; white-space: nowrap; }
 .resultComparison { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px; border: 1px solid #e7eee9; border-radius: 16px; background: #f8fbf9; }
 .resultComparison > div { display: grid; gap: 6px; }
+.resultComparison small { color: #617068; font-weight: 800; }
 .resultComparison span { color: #617068; font-size: .78rem; font-weight: 900; text-transform: uppercase; }
 .resultComparison strong { display: inline-flex; gap: 8px; align-items: center; color: #142019; font-size: 1.08rem; }
 .resultInfo { position: relative; }
@@ -344,6 +359,8 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .resultInfo div strong { display: block; margin-bottom: 6px; color: #116530; }
 .resultInfo div p { margin-bottom: 0; color: #617068; line-height: 1.4; }
 .resultAutoSummary { margin-bottom: 0; padding: 12px; border: 1px solid #e7eee9; border-radius: 14px; background: #fffdf5; color: #617068; font-weight: 800; line-height: 1.4; }
+.resultExternalLinks { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.resultExternalLinks .buttonLink { padding: 8px 11px; font-size: .85rem; }
 .resultCardHeader h2, .resultComparison strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cupHeader { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center; margin-bottom: 16px; padding: 26px; overflow: visible; border: 1px solid rgb(255 255 255 / 28%); border-radius: 28px; background: linear-gradient(135deg, #053d2e 0%, #08704f 47%, #0fa36b 100%); color: white; box-shadow: 0 22px 55px rgb(6 68 47 / 22%); }
 .cupHeader::before { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 10% 10%, rgb(255 255 255 / 20%), transparent 18rem), radial-gradient(circle at 92% 15%, rgb(255 210 75 / 35%), transparent 14rem); pointer-events: none; }
@@ -494,6 +511,20 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
 .adminSyncWarning { margin: 0; padding: 10px 12px; border: 1px solid #f1cf5a; border-radius: 12px; background: #fff8df; color: #8a5b12; font-weight: 800; }
 .adminSyncAlerts { display: grid; gap: 8px; }
 .adminSyncAlerts h3 { margin: 0; color: #617068; font-size: .9rem; letter-spacing: .06em; text-transform: uppercase; }
+.adminResultQueue { display: grid; gap: 12px; padding: 14px; border: 1px solid #e7eee9; border-radius: 16px; background: linear-gradient(135deg, #f8fbf9 0%, #fffdf4 100%); }
+.adminResultQueueHeader { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
+.adminResultQueueHeader h3 { margin: 0 0 4px; color: #142019; font-size: 1.05rem; }
+.adminResultQueueHeader p { margin: 0; color: #617068; font-size: .88rem; font-weight: 800; }
+.adminResultQueueMetrics { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; min-width: 250px; }
+.adminResultQueueMetrics span { padding: 7px 10px; border-radius: 999px; background: white; color: #116530; font-size: .78rem; font-weight: 1000; box-shadow: inset 0 0 0 1px #dce5df; }
+.adminResultQueueList { display: grid; gap: 8px; }
+.adminResultQueueItem { display: flex; justify-content: space-between; gap: 12px; padding: 11px 12px; border: 1px solid #e7eee9; border-radius: 14px; background: white; }
+.adminResultQueueItem div { display: grid; gap: 4px; }
+.adminResultQueueItem strong { color: #142019; }
+.adminResultQueueItem span { color: #617068; font-size: .8rem; font-weight: 850; }
+.adminResultQueueItemDue { border-color: #bbf7d0; background: #f0fdf4; }
+.adminResultQueueItemStale { border-color: #f1cf5a; background: #fff8df; }
+.adminResultQueueItemStale strong { color: #8a5b12; }
 .adminSyncRuns { display: grid; gap: 8px; }
 .adminSyncRuns h3 { margin: 0; color: #617068; font-size: .9rem; letter-spacing: .06em; text-transform: uppercase; }
 .adminSyncRun { display: flex; justify-content: space-between; gap: 12px; padding: 11px 12px; border: 1px solid #e7eee9; border-radius: 14px; background: #f8fbf9; }
@@ -685,10 +716,13 @@ th, td { padding: 12px 8px; border-bottom: 1px solid #e7eee9; text-align: left; 
   .poolContextBanner { align-items: flex-start; flex-direction: column; }
   .poolContextActions { justify-content: flex-start; }
   .poolMemberItem { align-items: flex-start; flex-direction: column; }
+  .assistantRecommendationList { grid-template-columns: 1fr; }
   .adminActivityHeader { align-items: flex-start; flex-direction: column; }
   .adminSyncHeader { align-items: flex-start; flex-direction: column; }
   .adminSyncStatus { width: 100%; text-align: left; }
   .adminAiAuditButton { width: 100%; }
+  .adminResultQueueHeader, .adminResultQueueItem { flex-direction: column; }
+  .adminResultQueueMetrics { justify-content: flex-start; min-width: 0; }
   .adminJobHealthGrid { grid-template-columns: 1fr; }
   .adminJobGrid { grid-template-columns: 1fr; }
   .knowledgeAuditSearch form { grid-template-columns: 1fr; }

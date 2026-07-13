@@ -21,9 +21,9 @@ type AssistantAction =
 
 const quickQuestions = [
   "Quais palpites ainda preciso fazer?",
-  "Me sugira uma estrategia conservadora para a proxima rodada.",
+  "Monte meu plano de coach da rodada.",
   "O que as noticias recentes podem influenciar nos palpites?",
-  "Como estou no ranking e onde posso melhorar?",
+  "Pelo meu historico, onde posso melhorar?",
 ];
 
 export function AiAssistantChat({ locale = "pt-BR", variant = "page" }: { locale?: AppLocale; variant?: "page" | "widget" }) {

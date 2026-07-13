@@ -4,11 +4,13 @@ import { auth } from "../../auth";
 import { AdminSyncFeedbackForm } from "../../components/AdminSyncFeedbackForm";
 import { CupHeader } from "../../components/CupHeader";
 import { isAdminEmail } from "../../lib/access-control";
+import { buildSofaScoreSearchUrl } from "../../lib/external-match-links";
 import { getCurrentLocale } from "../../lib/i18n";
 import { formatMessage, t, type AppLocale } from "../../lib/i18n-shared";
 import { MAX_GOALS, PREDICTION_CLOSE_MINUTES } from "../../lib/prediction";
 import { prisma } from "../../lib/prisma";
 import { readPositiveInt } from "../../lib/result-sync";
+import { getPendingResultSyncQueue, type ResultSyncQueueStatus } from "../../lib/result-sync-queue";
 import { getTeamDisplayName } from "../../lib/teams";
 import { getMatchVenue } from "../../lib/venues";
 import { saveMatchEvent, saveMatchLiveUrl, saveMatchResult, saveMatchStatus, syncPendingResultsWithFeedback } from "./actions";
@@ -37,6 +39,16 @@ function formatDateTime(date: Date, locale: AppLocale) {
   return `${dateFormatter.format(date)} ${timeFormatter.format(date)} ${locale === "en-US" ? "BRT" : "BRT"}`;
 }
 
+function formatDurationMinutes(minutes: number) {
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (hours < 24) return rest > 0 ? `${hours}h ${rest}min` : `${hours}h`;
+  const days = Math.floor(hours / 24);
+  const dayHours = hours % 24;
+  return dayHours > 0 ? `${days}d ${dayHours}h` : `${days}d`;
+}
+
 function formatMatchStatus(status: string, hasResult: boolean, locale: AppLocale) {
   const copy = t(locale);
   if (hasResult || status === "finished") return copy.common.finished;
@@ -49,6 +61,13 @@ function formatSyncStatus(status: string, locale: AppLocale) {
   if (status === "running") return copy.admin.syncRunning;
   if (status === "failed") return copy.admin.syncFailed;
   return copy.admin.syncSuccess;
+}
+
+function formatResultQueueStatus(status: ResultSyncQueueStatus, locale: AppLocale) {
+  const copy = t(locale);
+  if (status === "stale") return copy.admin.resultQueueStatusStale;
+  if (status === "due") return copy.admin.resultQueueStatusDue;
+  return copy.admin.resultQueueStatusWaiting;
 }
 
 type JobRunLike = {
@@ -204,19 +223,15 @@ export default async function AdminPage() {
   const latestPushJobRun = scheduledJobRuns.find((run) => run.jobName === "push_pending_picks") ?? null;
   const latestResultPushJobRun = scheduledJobRuns.find((run) => run.jobName === "push_results") ?? null;
   const now = new Date();
+  const resultSyncQueue = await getPendingResultSyncQueue(prisma, now);
   const syncDelayMinutes = readPositiveInt("SERPAPI_RESULT_DELAY_MINUTES", 120);
-  const staleSyncMinutes = readPositiveInt("SERPAPI_STALE_ALERT_MINUTES", syncDelayMinutes + 60);
   const jobRunningStaleMinutes = readPositiveInt("JOB_RUNNING_STALE_MINUTES", 20);
   const resultSyncJobStaleMinutes = readPositiveInt("JOB_RESULT_SYNC_STALE_MINUTES", 180);
   const pushReminderJobStaleMinutes = readPositiveInt("JOB_PUSH_REMINDER_STALE_MINUTES", 180);
   const resultPushJobStaleMinutes = readPositiveInt("JOB_RESULT_PUSH_STALE_MINUTES", 180);
-  const staleCutoff = new Date(now.getTime() - staleSyncMinutes * 60 * 1000);
-  const stalePendingMatches = matches.filter((match) =>
-    match.startsAt
-    && match.startsAt <= staleCutoff
-    && match.resultGoalsA === null
-    && match.resultGoalsB === null
-  );
+  const dueResultQueue = resultSyncQueue.filter((item) => item.status === "due");
+  const stalePendingMatches = resultSyncQueue.filter((item) => item.status === "stale");
+  const waitingResultQueue = resultSyncQueue.filter((item) => item.status === "waiting");
   const operationalMatches = matches
     .filter((match) => match.startsAt && match.resultGoalsA === null && match.resultGoalsB === null)
     .sort((a, b) => (a.startsAt?.getTime() ?? 0) - (b.startsAt?.getTime() ?? 0))
@@ -319,6 +334,45 @@ export default async function AdminPage() {
           {latestSyncRun?.status === "failed" && <p className="adminSyncError">{copy.admin.syncFailedAlert}</p>}
           {stalePendingMatches.length > 0 && <p className="adminSyncWarning">{formatMessage(copy.admin.syncStaleAlert, { count: stalePendingMatches.length })}</p>}
           {latestSyncRun?.status !== "failed" && stalePendingMatches.length === 0 && <p className="muted">{copy.admin.syncNoAlerts}</p>}
+        </div>
+
+        <div className="adminResultQueue">
+          <div className="adminResultQueueHeader">
+            <div>
+              <h3>{copy.admin.resultQueueTitle}</h3>
+              <p>{copy.admin.resultQueueDescription}</p>
+            </div>
+            <div className="adminResultQueueMetrics">
+              <span>{formatMessage(copy.admin.resultQueueDue, { count: dueResultQueue.length })}</span>
+              <span>{formatMessage(copy.admin.resultQueueWaiting, { count: waitingResultQueue.length })}</span>
+              <span>{formatMessage(copy.admin.resultQueueStale, { count: stalePendingMatches.length })}</span>
+            </div>
+          </div>
+
+          {resultSyncQueue.length === 0 ? (
+            <p className="muted">{copy.admin.resultQueueEmpty}</p>
+          ) : (
+            <div className="adminResultQueueList">
+              {resultSyncQueue.slice(0, 8).map((item) => {
+                const teamALabel = getTeamDisplayName(item.match.teamA, locale);
+                const teamBLabel = getTeamDisplayName(item.match.teamB, locale);
+                return (
+                  <article className={`adminResultQueueItem adminResultQueueItem${item.status === "stale" ? "Stale" : item.status === "due" ? "Due" : "Waiting"}`} key={item.match.id}>
+                    <div>
+                      <strong>{teamALabel} x {teamBLabel}</strong>
+                      <span>{formatResultQueueStatus(item.status, locale)} - {formatMessage(copy.admin.resultQueuePendingFor, { duration: formatDurationMinutes(item.elapsedMinutes) })}</span>
+                    </div>
+                    <div>
+                      <span>{formatMessage(copy.admin.resultQueueAttempts, { count: item.attemptCount })}</span>
+                      {item.lastAttemptAt && <span>{copy.admin.resultQueueLastAttempt}: {formatDateTime(item.lastAttemptAt, locale)}</span>}
+                      {item.nextAttemptAt && <span>{copy.admin.resultQueueNextAttempt}: {formatDateTime(item.nextAttemptAt, locale)}</span>}
+                      {item.lastReason && <span>{copy.admin.resultQueueLastReason}: {item.lastReason}</span>}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {syncRuns.length > 0 && (
@@ -489,10 +543,18 @@ export default async function AdminPage() {
                     aria-label={`${copy.admin.externalLiveUrl}: ${teamALabel} x ${teamBLabel}`}
                     defaultValue={match.liveUrl ?? ""}
                     name="liveUrl"
-                    placeholder="https://..."
+                    placeholder="https://www.sofascore.com/football/match/..."
                     type="url"
                   />
                 </label>
+                <a
+                  className="buttonLink buttonSecondary"
+                  href={buildSofaScoreSearchUrl(match.teamA, match.teamB, match.startsAt)}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  {copy.admin.findSofaScore}
+                </a>
                 <button className="buttonSecondary" type="submit">{copy.admin.saveLink}</button>
               </form>
 

@@ -29,6 +29,12 @@ function formatAverage(value: number) {
   return `${value.toFixed(1)}/100`;
 }
 
+function formatDelta(value: number | null) {
+  if (value === null) return "Primeira execucao";
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value.toFixed(1)} pts`;
+}
+
 function readMetadata(metadata: unknown) {
   return typeof metadata === "object" && metadata !== null ? metadata as Record<string, unknown> : {};
 }
@@ -288,15 +294,24 @@ export default async function AdminAiAuditPage({
             {evaluationRuns.map((run) => (
               <article className="adminJobCard" key={run.id}>
                 <div>
-                  <span className={run.failedCases > 0 ? "badge badgeGold" : "badge badgeSoft"}>
-                    {run.failedCases > 0 ? `${run.failedCases} falha(s)` : "Tudo ok"}
+                  <span className={run.qualityAlert ? "badge badgeGold" : run.failedCases > 0 ? "badge badgeGold" : "badge badgeSoft"}>
+                    {run.qualityAlert ? "Alerta de qualidade" : run.failedCases > 0 ? `${run.failedCases} falha(s)` : "Tudo ok"}
                   </span>
                   <h3>{formatAverage(run.averageScore)}</h3>
                   <p className="muted">
                     {run.passedCases}/{run.totalCases} caso(s) passaram
                   </p>
+                  {run.qualityAlert && <p className="adminSyncWarning">{run.qualityAlert}</p>}
                 </div>
                 <dl>
+                  <div>
+                    <dt>Delta</dt>
+                    <dd>{formatDelta(run.scoreDelta)}</dd>
+                  </div>
+                  <div>
+                    <dt>Anterior</dt>
+                    <dd>{run.previousAverageScore === null ? "N/A" : formatAverage(run.previousAverageScore)}</dd>
+                  </div>
                   <div>
                     <dt>Commit</dt>
                     <dd>{run.gitCommit ?? "N/A"}</dd>

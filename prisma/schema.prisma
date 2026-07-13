@@ -126,6 +126,7 @@ model Match {
   events             MatchEvent[]
   pushNotificationLogs PushNotificationLog[]
   userMatchAlerts    UserMatchAlert[]
+  resultSyncAttempts ResultSyncAttempt[]
 
   @@unique([group, teamA, teamB])
   @@index([startsAt])
@@ -236,10 +237,30 @@ model ResultSyncRun {
   errorMessage String?
   startedAt    DateTime  @default(now())
   finishedAt   DateTime?
+  attempts     ResultSyncAttempt[]
 
   @@index([provider])
   @@index([status])
   @@index([startedAt])
+}
+
+model ResultSyncAttempt {
+  id           String        @id @default(cuid())
+  matchId      String
+  runId        String?
+  provider     String
+  status       String
+  reason       String?
+  sourceStatus String?
+  metadata     Json?
+  createdAt    DateTime      @default(now())
+  match        Match         @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  run          ResultSyncRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  @@index([matchId, createdAt])
+  @@index([provider])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model ScheduledJobRun {
@@ -277,6 +298,9 @@ model KnowledgeDocument {
 model AiEvaluationRun {
   id                String   @id @default(cuid())
   averageScore      Float
+  previousAverageScore Float?
+  scoreDelta        Float?
+  qualityAlert      String?
   totalCases        Int
   passedCases       Int
   failedCases       Int
